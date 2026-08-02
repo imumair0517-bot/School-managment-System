@@ -15,7 +15,7 @@ reviewed and approved.
 | 4 | [User Flows](./04-user-flows.md) | ✅ Draft for review |
 | 5 | [Database Design](./05-database-design.md) | ✅ Draft for review |
 | 6 | [ER Diagram](./06-er-diagram.md) | ✅ Draft for review |
-| 7 | API Design | ⏳ Not started |
+| 7 | [API Design](./07-api-design.md) | ✅ Draft for review |
 | 8 | Frontend Architecture | ⏳ Not started |
 | 9 | Backend Architecture | ⏳ Not started |
 | 10 | Folder Structure | ⏳ Not started |
