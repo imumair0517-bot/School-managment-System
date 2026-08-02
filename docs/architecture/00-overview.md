@@ -1,0 +1,40 @@
+# School SaaS OS — Architecture Program
+
+This `docs/architecture/` folder is the single source of truth for the platform's
+architecture. It is built **phase by phase**, per the program below. No implementation
+code is written until the relevant phase (and the module design that follows it) is
+reviewed and approved.
+
+## Phase Index
+
+| # | Phase | Status |
+|---|-------|--------|
+| 1 | [Product Requirements Document](./01-prd.md) | ✅ Draft for review |
+| 2 | Feature Breakdown | ⏳ Not started |
+| 3 | User Stories | ⏳ Not started |
+| 4 | User Flows | ⏳ Not started |
+| 5 | Database Design | ⏳ Not started |
+| 6 | ER Diagram | ⏳ Not started |
+| 7 | API Design | ⏳ Not started |
+| 8 | Frontend Architecture | ⏳ Not started |
+| 9 | Backend Architecture | ⏳ Not started |
+| 10 | Folder Structure | ⏳ Not started |
+| 11 | UI Design System | ⏳ Not started |
+| 12 | Component Library | ⏳ Not started |
+| 13 | Development Roadmap | ⏳ Not started |
+| 14 | Testing Strategy | ⏳ Not started |
+| 15 | Deployment Strategy | ⏳ Not started |
+| 16 | Documentation Plan | ⏳ Not started |
+
+## Rules of engagement
+
+1. **Architecture before code.** Nothing under `apps/`, `packages/`, or `services/` gets
+   written until the phases feeding it are approved.
+2. **One phase at a time.** Each phase is a separate, reviewable deliverable.
+3. **Every module**, once we reach implementation, is designed with: purpose, features,
+   database tables, relationships, API endpoints, business rules, validation rules,
+   permissions, UI screens, reusable components, testing checklist, edge cases, and
+   acceptance criteria — before any code is generated for it.
+4. **Decisions are justified.** Every non-trivial architectural choice states the
+   alternatives considered and why the recommendation wins for this product, at this
+   stage, for this market.
