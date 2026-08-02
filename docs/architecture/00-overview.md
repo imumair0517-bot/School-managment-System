@@ -10,7 +10,7 @@ reviewed and approved.
 | # | Phase | Status |
 |---|-------|--------|
 | 1 | [Product Requirements Document](./01-prd.md) | ✅ Draft for review |
-| 2 | Feature Breakdown | ⏳ Not started |
+| 2 | [Feature Breakdown](./02-feature-breakdown.md) | ✅ Draft for review |
 | 3 | User Stories | ⏳ Not started |
 | 4 | User Flows | ⏳ Not started |
 | 5 | Database Design | ⏳ Not started |
