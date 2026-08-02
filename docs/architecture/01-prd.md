@@ -247,7 +247,7 @@ or a translation management pipeline in V1 — those are Year 2+ per §3.
 | Frontend | **Next.js 14+ (App Router), React, TypeScript, Tailwind, shadcn/ui** | Matches stated preference; excellent DX, SSR for fast first loads on average Pakistani mobile networks, huge hiring pool |
 | Frontend hosting | **Vercel** | Zero-config with Next.js, edge network helps latency for a geographically concentrated-but-bandwidth-variable user base |
 | Backend | **Node.js + TypeScript**, structured as modular services (not a monolith, not premature microservices — see Phase 9) | Consistency with frontend language, fast iteration, matches existing team familiarity (per this repo's existing sibling project) |
-| Tenant data plane | **PostgreSQL, one database per tenant** — hosting provider **to be re-evaluated in Phase 9** against the confirmed **Pakistan data-residency requirement** (see §13, decision #7) | Neon / AWS RDS were the default recommendation for database-per-tenant economics, but **neither has a data center physically inside Pakistan**, so neither satisfies "data must stay in Pakistan" as stated. Phase 9 needs to research actual in-country hosting options (Pakistani data-center/VPS/cloud providers, or a self-managed cluster colocated in-country) and re-price the database-per-tenant automation (provisioning, pooling, migrations) against what those providers actually support — this is now a real open engineering risk, not a solved problem |
+| Tenant data plane | **PostgreSQL, one database per tenant**, hosted on **Neon** (recommended) or **AWS RDS/Aurora Postgres** (alternative) | Data residency does **not** have to be in-country (confirmed — see §13, decision #7), so we go with whichever hosting best fits database-per-tenant economics rather than a narrower in-Pakistan provider list. Neon: instant DB provisioning + scale-to-zero pricing fits database-per-tenant far better than fixed-size RDS instances per tenant; RDS/Aurora: fallback if Neon's operational model or region coverage doesn't work out. Pick a region geographically close to Pakistan (e.g. a Middle East/South Asia region if either provider offers one) to keep latency reasonable for schools |
 | Connection pooling | **PgBouncer / Supavisor** in front of the tenant plane | Required — without it, database-per-tenant does not survive real connection concurrency |
 | Control plane (platform DB) | **PostgreSQL** (single, shared — this one *is* shared-schema, since it's platform data, not tenant data) | Standard OLTP for tenant registry, billing, super-admin |
 | Auth | **Supabase Auth** or equivalent (e.g. Clerk / self-hosted) — decision in Phase 9 | Needs to support per-tenant login URLs/branding and RBAC claims; final pick depends on how well it composes with database-per-tenant (Supabase Auth is normally paired with a single Supabase project/DB, so this needs explicit validation, not an assumption) |
@@ -263,11 +263,7 @@ or a translation management pipeline in V1 — those are Year 2+ per §3.
 This is a **recommendation**, not a locked decision — Phase 9 (Backend
 Architecture) is where we pressure-test Auth and Voice AI vendor choices
 specifically, since those are the two areas where "works great for a single
-Supabase project" assumptions break down under database-per-tenant. Phase 9
-now also carries the **Pakistan data-residency requirement** as a hard
-constraint across every row in this table that stores tenant data (tenant
-Postgres, file storage, and — if the eventual Auth provider stores user
-records — Auth too), not just the database layer.
+Supabase project" assumptions break down under database-per-tenant.
 
 ## 12. Branding
 
@@ -304,17 +300,13 @@ need re-validation with real research/testing before we build on top of them.
 6. **Team size** — **solo builder, AI-assisted development.** Phase 13
    (Roadmap) is paced for this explicitly — realistic weekly milestones for
    one person working with AI tools, not a multi-engineer sprint plan.
-7. **Data residency — (risk)** — **confirmed hard requirement: tenant data
-   must stay physically inside Pakistan.** This invalidates the default
-   Neon/AWS hosting recommendation in §11 as stated, since neither has an
-   in-country data center. Phase 9 must research actual Pakistan-based
-   hosting/data-center providers (or a self-managed, in-country-colocated
-   cluster) and re-validate that the database-per-tenant automation
-   (provisioning, connection pooling, migrations) is achievable on whatever
-   that provider actually supports — this is unresolved infrastructure risk,
-   not a solved problem, and should be one of the first things validated in
-   Phase 9, before deeper backend design is built on top of an assumed
-   hosting provider.
+7. **Data residency — resolved, not a constraint.** Tenant data does **not**
+   need to stay physically inside Pakistan. The default §11 recommendation
+   (Neon, or AWS RDS/Aurora, in a region geographically close to Pakistan for
+   latency) stands as-is. This removes what would have been the platform's
+   biggest infrastructure risk — no need to source a Pakistan-based
+   data-center provider or validate database-per-tenant automation against a
+   narrower, less proven hosting option.
 
 ## 14. Success Metrics (Year 1)
 
@@ -334,7 +326,6 @@ need re-validation with real research/testing before we build on top of them.
 | Risk | Mitigation |
 |---|---|
 | Database-per-tenant operational complexity outgrows a small team (now solo + AI-assisted, per decision #6) | Invest early in the provisioning/migration automation (Phase 9) rather than treating it as later polish — it is the load-bearing wall of this architecture |
-| **In-Pakistan data residency requirement (decision #7) may not have a mature, cheap, database-per-tenant-friendly hosting option** | First task of Phase 9: survey real Pakistan-based hosting providers before any further backend design; if no provider supports the automation this architecture needs, we revisit either the hosting approach or the strict per-tenant-database model for this specific constraint |
 | Voice AI in Urdu (decision #4) is less mature than English tooling | Validate vendor TTS/STT Urdu quality with real audio samples before committing to it as a shipped feature; keep an English-fallback path available if Urdu quality isn't good enough at launch |
 | Feature scope (16 phases, dozens of modules) invites building too much before revenue | V1/V2/V3 waves in §8 exist specifically to force sequencing; Phase 13 roadmap will hold this line |
 | Local payment gateway integrations (JazzCash/EasyPaisa) have real-world approval/integration friction | Start the merchant-account/integration process in parallel with engineering, not after |
