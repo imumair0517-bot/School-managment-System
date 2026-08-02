@@ -12,7 +12,7 @@ reviewed and approved.
 | 1 | [Product Requirements Document](./01-prd.md) | ✅ Draft for review |
 | 2 | [Feature Breakdown](./02-feature-breakdown.md) | ✅ Draft for review |
 | 3 | [User Stories](./03-user-stories.md) | ✅ Draft for review |
-| 4 | User Flows | ⏳ Not started |
+| 4 | [User Flows](./04-user-flows.md) | ✅ Draft for review |
 | 5 | Database Design | ⏳ Not started |
 | 6 | ER Diagram | ⏳ Not started |
 | 7 | API Design | ⏳ Not started |
