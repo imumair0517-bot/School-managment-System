@@ -1,0 +1,24 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: school_os
+      POSTGRES_PASSWORD: school_os
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Creates two separate databases on container init — one Platform DB,
+      # one Tenant DB standing in for a single manually-provisioned tenant
+      # (Phase 9 §3's automated pipeline replaces this by hand-created pair
+      # starting Milestone 1).
+      - ./infra/scripts/init-local-dbs.sql:/docker-entrypoint-initdb.d/init-local-dbs.sql
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+volumes:
+  postgres_data:

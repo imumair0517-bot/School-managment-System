@@ -1,0 +1,27 @@
+{
+  "name": "school-saas-os",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "db/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace=apps/web",
+    "dev:api": "npm run dev --workspace=apps/api",
+    "dev:worker": "npm run dev --workspace=apps/worker",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "db:platform:migrate": "npm run migrate --workspace=db/platform",
+    "db:platform:seed": "npm run seed --workspace=db/platform",
+    "db:tenant:migrate": "npm run migrate --workspace=db/tenant",
+    "db:tenant:seed": "npm run seed --workspace=db/tenant"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

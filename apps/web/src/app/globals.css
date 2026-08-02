@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Phase 11 UI Design System §2 — color tokens. V1 ships light mode only
+   (Phase 11 §8), but every value is a semantic variable, never a literal
+   hex in a component, so dark mode is a token addition later, not a
+   component rewrite. */
+:root {
+  --bg: #faf9f6;
+  --surface: #ffffff;
+  --border: #e4e2db;
+  --ink: #1b211d;
+  --ink-muted: #6e756f;
+
+  --accent: #1f6f5c;
+  --accent-soft: #e4f0ec;
+
+  --success: #2e7d4f;
+  --warning: #9c6f22;
+  --critical: #b23b2e;
+  --info: #3b6fa0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, "Segoe UI", "Helvetica Neue", system-ui, sans-serif;
+}
