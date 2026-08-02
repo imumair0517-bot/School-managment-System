@@ -15,6 +15,7 @@
     "@school-os/db-platform": "*",
     "@school-os/db-tenant": "*",
     "@school-os/jobs": "*",
+    "@school-os/permissions": "*",
     "@school-os/validation": "*",
     "bcryptjs": "^2.4.3",
     "bullmq": "^5.28.2",

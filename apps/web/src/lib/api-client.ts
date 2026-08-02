@@ -65,4 +65,14 @@ export const api = {
     apiFetch("/v1/admin/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   adminLogout: () => apiFetch("/v1/admin/logout", { method: "POST" }),
   adminTenants: () => apiFetch("/v1/admin/tenants"),
+
+  listStaff: () => apiFetch("/v1/users"),
+  createStaff: (input: { fullName: string; email: string; phone: string; role: string }) =>
+    apiFetch("/v1/users", { method: "POST", body: JSON.stringify(input) }),
+  updateStaffPermissions: (userId: string, permissions: Record<string, "none" | "read" | "write">) =>
+    apiFetch(`/v1/users/${userId}/permissions`, { method: "PATCH", body: JSON.stringify({ permissions }) }),
+
+  getSettings: () => apiFetch("/v1/settings"),
+  updateSettings: (input: { brandingLogoUrl?: string; brandingPrimaryColor?: string }) =>
+    apiFetch("/v1/settings", { method: "PATCH", body: JSON.stringify(input) }),
 };

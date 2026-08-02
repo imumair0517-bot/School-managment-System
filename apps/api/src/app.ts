@@ -3,6 +3,7 @@ import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import { identityRoutes } from "./modules/identity/routes.js";
 import { platformRoutes } from "./modules/platform/routes.js";
+import { settingsRoutes } from "./modules/settings/routes.js";
 
 export function buildApp() {
   const app = Fastify({ logger: true });
@@ -16,6 +17,10 @@ export function buildApp() {
   app.register(cors, {
     origin: process.env.FRONTEND_URL ?? "http://localhost:3000",
     credentials: true,
+    // @fastify/cors's default methods list doesn't include PATCH — every
+    // method the Tenant API actually uses (Phase 7 §2) needs to be listed
+    // explicitly, not discovered one 404'd preflight at a time.
+    methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
   });
 
   // Unauthenticated, un-tenant-scoped — infra health check only.
@@ -23,6 +28,7 @@ export function buildApp() {
 
   app.register(identityRoutes);
   app.register(platformRoutes);
+  app.register(settingsRoutes);
 
   return app;
 }
