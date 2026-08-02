@@ -24,7 +24,11 @@ reviewed and approved.
 | 13 | [Development Roadmap](./13-development-roadmap.md) | ✅ Draft for review |
 | 14 | [Testing Strategy](./14-testing-strategy.md) | ✅ Draft for review |
 | 15 | [Deployment Strategy](./15-deployment-strategy.md) | ✅ Draft for review |
-| 16 | Documentation Plan | ⏳ Not started |
+| 16 | [Documentation Plan](./16-documentation-plan.md) | ✅ Draft for review |
+
+**All 16 phases drafted.** Per rule 1 below, implementation (starting with
+Milestone M0 in [Phase 13](./13-development-roadmap.md)) begins once these
+are reviewed and approved — not automatically.
 
 ## Rules of engagement
 
