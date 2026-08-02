@@ -23,7 +23,7 @@ reviewed and approved.
 | 12 | [Component Library](./12-component-library.md) | ✅ Draft for review |
 | 13 | [Development Roadmap](./13-development-roadmap.md) | ✅ Draft for review |
 | 14 | [Testing Strategy](./14-testing-strategy.md) | ✅ Draft for review |
-| 15 | Deployment Strategy | ⏳ Not started |
+| 15 | [Deployment Strategy](./15-deployment-strategy.md) | ✅ Draft for review |
 | 16 | Documentation Plan | ⏳ Not started |
 
 ## Rules of engagement
