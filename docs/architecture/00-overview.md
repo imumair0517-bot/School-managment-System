@@ -18,7 +18,7 @@ reviewed and approved.
 | 7 | [API Design](./07-api-design.md) | ✅ Draft for review |
 | 8 | [Frontend Architecture](./08-frontend-architecture.md) | ✅ Draft for review |
 | 9 | [Backend Architecture](./09-backend-architecture.md) | ✅ Draft for review |
-| 10 | Folder Structure | ⏳ Not started |
+| 10 | [Folder Structure](./10-folder-structure.md) | ✅ Draft for review |
 | 11 | UI Design System | ⏳ Not started |
 | 12 | Component Library | ⏳ Not started |
 | 13 | Development Roadmap | ⏳ Not started |
