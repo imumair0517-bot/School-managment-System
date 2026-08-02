@@ -24,6 +24,9 @@ function Shell({ children }: { children: React.ReactNode }) {
 
   const navItems = [
     { href: "/dashboard", label: "Home", show: true },
+    { href: "/dashboard/admissions", label: "Admissions", show: me.permissions.admissions !== "none" },
+    { href: "/dashboard/students", label: "Students", show: me.permissions.academic !== "none" },
+    { href: "/dashboard/academic", label: "Academic Setup", show: me.permissions.academic === "write" },
     { href: "/dashboard/team", label: "Team", show: me.permissions.users !== "none" },
     { href: "/dashboard/settings", label: "Settings", show: me.permissions.settings !== "none" },
   ];
@@ -65,7 +68,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <div className="mx-auto max-w-3xl px-6 py-10">{children}</div>
+      <div className="mx-auto max-w-5xl px-6 py-10">{children}</div>
     </div>
   );
 }

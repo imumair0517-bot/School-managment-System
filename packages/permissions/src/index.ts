@@ -14,10 +14,11 @@ export type UserRole =
   | "parent"
   | "student";
 
-// Grows as modules are built — Milestone 2 only has real routes behind
-// "users" and "settings"; admissions/academic/finance/communication get
-// added here when their milestones do (Phase 13), not speculatively now.
-export type PermissionModule = "users" | "settings";
+// Grows as modules are built — Milestone 3 adds "admissions" (the
+// inquiry→enrollment pipeline, Phase 2 §B1) and "academic" (everything
+// post-enrollment: students, classes, sections, sessions, Phase 2 §B2-B4).
+// finance/communication get added when their milestones do (Phase 13).
+export type PermissionModule = "users" | "settings" | "admissions" | "academic";
 
 export type PermissionLevel = "none" | "read" | "write";
 
@@ -33,13 +34,18 @@ export function meetsLevel(have: PermissionLevel, need: PermissionLevel): boolea
 // via a per-user override (user_permission_overrides, Phase 5 §3.2) —
 // never by changing these shared defaults.
 export const ROLE_DEFAULTS: Record<UserRole, Record<PermissionModule, PermissionLevel>> = {
-  school_owner: { users: "write", settings: "write" },
-  principal: { users: "write", settings: "write" },
-  admin_staff: { users: "none", settings: "none" },
-  hr: { users: "read", settings: "none" },
-  teacher: { users: "none", settings: "none" },
-  parent: { users: "none", settings: "none" },
-  student: { users: "none", settings: "none" },
+  school_owner: { users: "write", settings: "write", admissions: "write", academic: "write" },
+  principal: { users: "write", settings: "write", admissions: "write", academic: "write" },
+  // Admin Staff runs admissions day-to-day by default (Phase 2 §B1) and
+  // needs to see/manage the structure students enroll into — but not
+  // staff accounts or branding (Phase 3 A4's own example).
+  admin_staff: { users: "none", settings: "none", admissions: "write", academic: "write" },
+  hr: { users: "read", settings: "none", admissions: "none", academic: "none" },
+  // Teachers can look up students/classes (their own roster, later
+  // scoped further) but don't run admissions or edit school structure.
+  teacher: { users: "none", settings: "none", admissions: "none", academic: "read" },
+  parent: { users: "none", settings: "none", admissions: "none", academic: "none" },
+  student: { users: "none", settings: "none", admissions: "none", academic: "none" },
 };
 
 export type PermissionOverride = Partial<Record<PermissionModule, PermissionLevel>>;

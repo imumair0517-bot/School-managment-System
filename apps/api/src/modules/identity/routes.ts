@@ -1,5 +1,4 @@
 import type { FastifyInstance } from "fastify";
-import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { eq } from "drizzle-orm";
@@ -11,17 +10,9 @@ import { tenantResolutionMiddleware } from "../../middleware/tenant-resolution.j
 import { requireAuth } from "../../middleware/auth.js";
 import { requirePermission } from "../../middleware/permissions.js";
 import { logAuditEvent } from "../../db/audit.js";
+import { generateTempPassword } from "../../utils/password.js";
 
 const JWT_SECRET = process.env.JWT_SECRET ?? "dev-only-secret-change-me";
-
-function generateTempPassword() {
-  // Dev/no-email-yet convenience (Phase 2 §D doesn't exist until a later
-  // milestone): readable-ish random password, returned once in the API
-  // response so the School Owner can hand it to the new staff member
-  // directly. A real deployment emails/WhatsApps an invite link instead —
-  // tracked as deferred scope, not silently forgotten.
-  return crypto.randomBytes(9).toString("base64url");
-}
 
 export async function identityRoutes(app: FastifyInstance) {
   // Phase 7 §5.1 — POST /v1/auth/login

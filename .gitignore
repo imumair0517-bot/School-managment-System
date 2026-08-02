@@ -5,3 +5,4 @@ dist/
 *.local
 .turbo/
 next-env.d.ts
+dump.rdb

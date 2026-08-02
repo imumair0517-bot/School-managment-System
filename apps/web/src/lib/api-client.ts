@@ -75,4 +75,36 @@ export const api = {
   getSettings: () => apiFetch("/v1/settings"),
   updateSettings: (input: { brandingLogoUrl?: string; brandingPrimaryColor?: string }) =>
     apiFetch("/v1/settings", { method: "PATCH", body: JSON.stringify(input) }),
+
+  // Academic structure (Milestone 3, Phase 7 §5.3)
+  listAcademicSessions: () => apiFetch("/v1/academic-sessions"),
+  createAcademicSession: (input: { name: string; startDate: string; endDate: string }) =>
+    apiFetch("/v1/academic-sessions", { method: "POST", body: JSON.stringify(input) }),
+  listClasses: () => apiFetch("/v1/classes"),
+  createClass: (input: { name: string }) => apiFetch("/v1/classes", { method: "POST", body: JSON.stringify(input) }),
+  listSections: (params?: { academicSessionId?: string; classId?: string }) => {
+    const qs = new URLSearchParams(params as Record<string, string>).toString();
+    return apiFetch(`/v1/sections${qs ? `?${qs}` : ""}`);
+  },
+  createSection: (input: { classId: string; academicSessionId: string; name: string; capacity: number; classTeacherId?: string }) =>
+    apiFetch("/v1/sections", { method: "POST", body: JSON.stringify(input) }),
+
+  // Admissions (Milestone 3, Phase 7 §5.2, Flow 2)
+  listInquiries: (stage?: string) => apiFetch(`/v1/admissions/inquiries${stage ? `?stage=${stage}` : ""}`),
+  createInquiry: (input: {
+    applicantName: string;
+    guardianName: string;
+    guardianEmail: string;
+    guardianPhone: string;
+    classApplyingForId: string;
+    source?: string;
+    notes?: string;
+  }) => apiFetch("/v1/admissions/inquiries", { method: "POST", body: JSON.stringify(input) }),
+  updateInquiryStage: (inquiryId: string, stage: string) =>
+    apiFetch(`/v1/admissions/inquiries/${inquiryId}/stage`, { method: "PATCH", body: JSON.stringify({ stage }) }),
+  admitInquiry: (inquiryId: string, sectionId: string) =>
+    apiFetch(`/v1/admissions/inquiries/${inquiryId}/admit`, { method: "POST", body: JSON.stringify({ sectionId }) }),
+
+  listStudents: () => apiFetch("/v1/students"),
+  getStudent: (studentId: string) => apiFetch(`/v1/students/${studentId}`),
 };

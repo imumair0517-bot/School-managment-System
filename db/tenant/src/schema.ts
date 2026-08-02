@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, pgEnum, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, pgEnum, jsonb, integer, boolean, date } from "drizzle-orm/pg-core";
 
 // Tenant DB template — Phase 5 §3. This file is the single source of truth
 // the provisioning pipeline (Phase 9 §3) clones for every new school, and
@@ -6,8 +6,13 @@ import { pgTable, uuid, text, timestamp, pgEnum, jsonb } from "drizzle-orm/pg-co
 // tenant database. No tenant_id column anywhere in here, on purpose —
 // isolation is physical (one database per tenant), per Phase 5 Principle 1.
 //
-// Students, guardians, academic structure, etc. (Phase 5 §3-4) are added
-// starting Milestone 3.
+// Milestone 3 adds people (students, guardians) and the structural
+// container they enroll into (academic sessions, classes, sections).
+// Subjects/timetable (Phase 5 §4.1) are deferred to Milestone 4 — nothing
+// consumes a subject catalog until timetable/homework/exams exist, so it
+// stays out of the schema until one of those milestones actually needs it,
+// same discipline as the deferred tenant_settings/guardian-preference
+// columns noted elsewhere in this file.
 
 export const userRoleEnum = pgEnum("user_role", [
   "school_owner",
@@ -71,4 +76,107 @@ export const auditLog = pgTable("audit_log", {
   occurredAt: timestamp("occurred_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+});
+
+// --- Milestone 3: Academic structure (Phase 5 §4.1) ---
+// academic_sessions is the backbone every other academic-year-scoped table
+// (sections now; attendance/exams/fees later) keys off, per Phase 5
+// Principle 3 — what makes year-end promotion (Milestone 11) safe without
+// overwriting history.
+
+export const academicSessions = pgTable("academic_sessions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date").notNull(),
+  isCurrent: boolean("is_current").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const classes = pgTable("classes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const sections = pgTable("sections", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  classId: uuid("class_id").notNull().references(() => classes.id),
+  academicSessionId: uuid("academic_session_id").notNull().references(() => academicSessions.id),
+  name: text("name").notNull(),
+  capacity: integer("capacity").notNull(),
+  classTeacherId: uuid("class_teacher_id").references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// --- Milestone 3: Admissions & People (Phase 5 §4.2) ---
+
+export const admissionStageEnum = pgEnum("admission_stage", [
+  "inquiry",
+  "applicant",
+  "interview",
+  "admitted",
+  "enrolled",
+  "rejected",
+  "waitlisted",
+]);
+
+export const admissionInquiries = pgTable("admission_inquiries", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  applicantName: text("applicant_name").notNull(),
+  dob: date("dob"),
+  guardianName: text("guardian_name").notNull(),
+  guardianEmail: text("guardian_email").notNull(),
+  guardianPhone: text("guardian_phone").notNull(),
+  classApplyingForId: uuid("class_applying_for_id").notNull().references(() => classes.id),
+  stage: admissionStageEnum("stage").notNull().default("inquiry"),
+  source: text("source"),
+  notes: text("notes"),
+  // Set once the inquiry converts (POST .../admit) — lets a student record
+  // link back to the inquiry it came from without the reverse being true
+  // (an inquiry that's rejected/waitlisted never gets a student row).
+  enrolledStudentId: uuid("enrolled_student_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const studentStatusEnum = pgEnum("student_status", [
+  "active",
+  "transferred",
+  "graduated",
+  "suspended",
+]);
+
+export const genderEnum = pgEnum("gender", ["male", "female", "other"]);
+
+export const students = pgTable("students", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  // Every student has a required login (Phase 5 §6, confirmed decision) —
+  // a guardian manages the credentials while the student is young.
+  userId: uuid("user_id").notNull().unique().references(() => users.id),
+  fullName: text("full_name").notNull(),
+  dob: date("dob"),
+  gender: genderEnum("gender"),
+  cnicBform: text("cnic_bform"),
+  currentSectionId: uuid("current_section_id").references(() => sections.id),
+  status: studentStatusEnum("status").notNull().default("active"),
+  admissionDate: date("admission_date").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const guardians = pgTable("guardians", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().unique().references(() => users.id),
+  cnic: text("cnic"),
+  // Communication channel preference / Voice AI opt-out (Phase 5 §3.3) are
+  // deferred until the Communication module (Milestone 9) actually reads
+  // them — same "don't add unused columns" call made elsewhere in this
+  // file.
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const studentGuardians = pgTable("student_guardians", {
+  studentId: uuid("student_id").notNull().references(() => students.id),
+  guardianId: uuid("guardian_id").notNull().references(() => guardians.id),
+  isPrimaryBillingContact: boolean("is_primary_billing_contact").notNull().default(true),
 });

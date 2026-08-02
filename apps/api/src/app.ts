@@ -4,6 +4,8 @@ import cors from "@fastify/cors";
 import { identityRoutes } from "./modules/identity/routes.js";
 import { platformRoutes } from "./modules/platform/routes.js";
 import { settingsRoutes } from "./modules/settings/routes.js";
+import { academicRoutes } from "./modules/academic/routes.js";
+import { admissionsRoutes } from "./modules/admissions/routes.js";
 
 export function buildApp() {
   const app = Fastify({ logger: true });
@@ -29,6 +31,8 @@ export function buildApp() {
   app.register(identityRoutes);
   app.register(platformRoutes);
   app.register(settingsRoutes);
+  app.register(academicRoutes);
+  app.register(admissionsRoutes);
 
   return app;
 }
