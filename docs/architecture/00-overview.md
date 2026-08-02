@@ -20,7 +20,7 @@ reviewed and approved.
 | 9 | [Backend Architecture](./09-backend-architecture.md) | ✅ Draft for review |
 | 10 | [Folder Structure](./10-folder-structure.md) | ✅ Draft for review |
 | 11 | [UI Design System](./11-ui-design-system.md) | ✅ Draft for review |
-| 12 | Component Library | ⏳ Not started |
+| 12 | [Component Library](./12-component-library.md) | ✅ Draft for review |
 | 13 | Development Roadmap | ⏳ Not started |
 | 14 | Testing Strategy | ⏳ Not started |
 | 15 | Deployment Strategy | ⏳ Not started |
