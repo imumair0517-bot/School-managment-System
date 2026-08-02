@@ -146,9 +146,11 @@ fundamental to the whole architecture and is detailed in Phase 5.
 
 ## 7. Subscription & Business Model
 
-- **Free Trial:** 14 or 30 days (decision needed — see §13), full feature
-  access up to a student-count cap, to let the school actually feel the
-  product before paying.
+- **Free Trial:** **7 days** (confirmed), full feature access up to a
+  student-count cap, to let the school actually feel the product before
+  paying. Short window — worth watching activation data closely post-launch
+  and lengthening if 7 days proves too short for a school to reach a real
+  "we use this daily" moment.
 - **Plans:** tiered by (a) student count bands and (b) feature tier
   (e.g. Core, Growth, Enterprise), billed **monthly or yearly** (yearly at a
   discount — standard SaaS lever to reduce churn and improve cash flow).
@@ -180,7 +182,7 @@ within ~2-3 months of V1. "V3" = differentiators that can follow.
 | Attendance (student) | V1 | Teacher-marked; parent-visible |
 | Timetable | V1 | |
 | Homework / Assignments | V1 | |
-| Exams, Marks, Report Cards | V1 | Configurable grading schemes (critical for Pakistani curricula — see §13 open question) |
+| Exams, Marks, Report Cards | V1 | **Matric / Lahore Board grading confirmed as the V1 target** (marks-based, division/grade rules per Lahore Board conventions). Built on a configurable grading engine underneath so Cambridge O/A-Levels or other boards can be added later as additional templates without a data model rewrite. |
 | Fee Structures, Invoices, Receipts | V1 | |
 | Online Payments (JazzCash, EasyPaisa, bank transfer) | V1 | Core differentiator vs. cash-only competitors |
 | Announcements, Push Notifications | V1 | |
@@ -245,7 +247,7 @@ or a translation management pipeline in V1 — those are Year 2+ per §3.
 | Frontend | **Next.js 14+ (App Router), React, TypeScript, Tailwind, shadcn/ui** | Matches stated preference; excellent DX, SSR for fast first loads on average Pakistani mobile networks, huge hiring pool |
 | Frontend hosting | **Vercel** | Zero-config with Next.js, edge network helps latency for a geographically concentrated-but-bandwidth-variable user base |
 | Backend | **Node.js + TypeScript**, structured as modular services (not a monolith, not premature microservices — see Phase 9) | Consistency with frontend language, fast iteration, matches existing team familiarity (per this repo's existing sibling project) |
-| Tenant data plane | **PostgreSQL, one database per tenant**, hosted on **Neon** (recommended) or **AWS RDS/Aurora Postgres** (alternative) | Neon: instant DB provisioning + scale-to-zero economics fit database-per-tenant far better than fixed-size RDS instances per tenant; RDS/Aurora: fallback if Neon's operational model or region coverage doesn't fit compliance needs |
+| Tenant data plane | **PostgreSQL, one database per tenant** — hosting provider **to be re-evaluated in Phase 9** against the confirmed **Pakistan data-residency requirement** (see §13, decision #7) | Neon / AWS RDS were the default recommendation for database-per-tenant economics, but **neither has a data center physically inside Pakistan**, so neither satisfies "data must stay in Pakistan" as stated. Phase 9 needs to research actual in-country hosting options (Pakistani data-center/VPS/cloud providers, or a self-managed cluster colocated in-country) and re-price the database-per-tenant automation (provisioning, pooling, migrations) against what those providers actually support — this is now a real open engineering risk, not a solved problem |
 | Connection pooling | **PgBouncer / Supavisor** in front of the tenant plane | Required — without it, database-per-tenant does not survive real connection concurrency |
 | Control plane (platform DB) | **PostgreSQL** (single, shared — this one *is* shared-schema, since it's platform data, not tenant data) | Standard OLTP for tenant registry, billing, super-admin |
 | Auth | **Supabase Auth** or equivalent (e.g. Clerk / self-hosted) — decision in Phase 9 | Needs to support per-tenant login URLs/branding and RBAC claims; final pick depends on how well it composes with database-per-tenant (Supabase Auth is normally paired with a single Supabase project/DB, so this needs explicit validation, not an assumption) |
@@ -253,7 +255,7 @@ or a translation management pipeline in V1 — those are Year 2+ per §3.
 | Realtime | **WebSockets via a managed provider** (Supabase Realtime, Pusher, or Ably) | Notifications, live dashboards |
 | Background jobs / queue | **A job queue** (e.g. BullMQ on Redis, or a managed queue) | Voice AI call orchestration, bulk WhatsApp/SMS sends, report generation, tenant provisioning pipeline all need async, retryable jobs |
 | AI (text) | **LLM API** (Claude via Anthropic API) for report comments, homework/exam generation, admission assistant, parent support agent | Matches "AI-first" requirement; server-side only, tenant content never used to train third-party models without explicit opt-in |
-| Voice AI | **Telephony + conversational AI stack**: SIP/PSTN provider (e.g. Twilio, or a Pakistan-capable telephony partner) + speech-to-text/text-to-speech + LLM orchestration (e.g. a voice-agent platform, or custom orchestration over the same LLM) | Needs Urdu/English natural speech; vendor selection is a dedicated decision — see §13 |
+| Voice AI | **Telephony + conversational AI stack**: SIP/PSTN provider + speech-to-text/text-to-speech + LLM orchestration | **Urdu-first confirmed.** No vendor chosen yet (deliberately — to be researched and shortlisted in Phase 9). Urdu STT/TTS quality is the single biggest technical risk in this whole platform and must be validated with real audio samples before we promise it to any school |
 | SMS / WhatsApp | **WhatsApp Business API** (via a BSP) + SMS gateway (local Pakistani SMS aggregator) | |
 | Deployment / infra | **Vercel (frontend)**, **containers on a managed platform (e.g. Railway/Fly.io/ECS) for backend + control plane**, IaC (Terraform) for the tenant-provisioning-critical pieces | Backend needs long-lived processes (job workers, Voice AI orchestration) that don't fit serverless functions well |
 | Observability | **Structured logging + error tracking (e.g. Sentry) + metrics (e.g. Grafana/Prometheus or a managed APM)**, tenant-tagged on every log/metric | Non-negotiable at this tenant scale — see §14 |
@@ -261,7 +263,11 @@ or a translation management pipeline in V1 — those are Year 2+ per §3.
 This is a **recommendation**, not a locked decision — Phase 9 (Backend
 Architecture) is where we pressure-test Auth and Voice AI vendor choices
 specifically, since those are the two areas where "works great for a single
-Supabase project" assumptions break down under database-per-tenant.
+Supabase project" assumptions break down under database-per-tenant. Phase 9
+now also carries the **Pakistan data-residency requirement** as a hard
+constraint across every row in this table that stores tenant data (tenant
+Postgres, file storage, and — if the eventual Auth provider stores user
+records — Auth too), not just the database layer.
 
 ## 12. Branding
 
@@ -269,38 +275,46 @@ Supabase project" assumptions break down under database-per-tenant.
 product decision — needs a real product name before go-to-market. Flagged as
 an open question in §13, not something to silently decide.
 
-## 13. Open Questions (need your input before Phase 5 locks the data model)
+## 13. Decisions Log
 
-These are the decisions specific enough that guessing wrong is expensive to
-unwind later:
+Resolved in review of this draft. Carried forward into every later phase —
+the two marked **(risk)** are the ones that most change downstream design and
+need re-validation with real research/testing before we build on top of them.
 
-1. **Product name & domain** — placeholder "School SaaS OS" used throughout
-   these docs until you decide.
-2. **Free trial length & cap** — 14 vs. 30 days, and whether capped by
-   student count, feature set, or both.
-3. **Grading/curriculum systems to support in V1** — Pakistani schools mix
-   Cambridge (O/A-Levels), Matric/FBISE, and internal grading schemes
-   simultaneously, sometimes within the same school across grade levels. This
-   materially affects the Exams/Marks/Report Card data model (Phase 5) — need
-   to know which of these V1 must support natively vs. via a generic
-   configurable grading-scheme engine.
-4. **Voice AI vendor** — do you have an existing relationship/preference
-   (e.g. Twilio, Vapi, a Pakistan-local telephony partner), or should this be
-   an open build-vs-buy recommendation in Phase 9? Also: is Urdu conversational
-   voice a V1 requirement or can V1 launch English-only with Urdu in V2?
-   This changes vendor shortlist significantly.
-5. **Payment gateway priority** — JazzCash and EasyPaisa both need merchant
-   accounts/agreements; do you already have one in progress, or should Phase
-   9 treat both as symmetric options behind the same interface with no
-   launch-blocking dependency on either?
-6. **Team size & timeline** — Phase 13 (Roadmap) needs a real team size
-   (solo you + AI-assisted development? a small team?) to produce a roadmap
-   that isn't fictional.
-7. **Compliance** — Pakistan doesn't yet have a fully mature dedicated data
-   protection law equivalent to GDPR at time of writing, but do have
-   awareness of any specific data-residency requirement from target schools
-   (e.g. "data must stay in-country")? This affects the hosting-region
-   decision in §11/Phase 9.
+1. **Product name & domain** — not decided yet. Placeholder "School SaaS OS"
+   stays in use throughout these docs until a real name is chosen, closer to
+   launch.
+2. **Free trial length** — **7 days**, full features up to a student-count
+   cap. Noted as aggressive; revisit if trial-to-paid activation data says
+   schools need longer to feel the product.
+3. **Grading/curriculum system for V1** — **Matric / Lahore Board** grading,
+   confirmed. Built on a configurable grading engine so other boards
+   (Cambridge O/A-Levels, FBISE, etc.) can be added later as templates rather
+   than a data-model rewrite.
+4. **Voice AI language — (risk)** — **Urdu first.** This is now flagged as
+   the single biggest technical risk in the platform: Urdu speech-to-text and
+   text-to-speech quality must be validated with real audio before we
+   commit to it in front of schools. No vendor chosen yet — Phase 9
+   researches and shortlists telephony/voice-AI vendors with genuine Urdu
+   support.
+5. **Payment gateway** — **no merchant account yet** with JazzCash or
+   EasyPaisa. Phase 9 designs the payment integration layer to support both
+   symmetrically, so engineering isn't blocked on either merchant-account
+   approval — that can proceed in parallel.
+6. **Team size** — **solo builder, AI-assisted development.** Phase 13
+   (Roadmap) is paced for this explicitly — realistic weekly milestones for
+   one person working with AI tools, not a multi-engineer sprint plan.
+7. **Data residency — (risk)** — **confirmed hard requirement: tenant data
+   must stay physically inside Pakistan.** This invalidates the default
+   Neon/AWS hosting recommendation in §11 as stated, since neither has an
+   in-country data center. Phase 9 must research actual Pakistan-based
+   hosting/data-center providers (or a self-managed, in-country-colocated
+   cluster) and re-validate that the database-per-tenant automation
+   (provisioning, connection pooling, migrations) is achievable on whatever
+   that provider actually supports — this is unresolved infrastructure risk,
+   not a solved problem, and should be one of the first things validated in
+   Phase 9, before deeper backend design is built on top of an assumed
+   hosting provider.
 
 ## 14. Success Metrics (Year 1)
 
@@ -319,13 +333,14 @@ unwind later:
 
 | Risk | Mitigation |
 |---|---|
-| Database-per-tenant operational complexity outgrows a small team | Invest early in the provisioning/migration automation (Phase 9) rather than treating it as later polish — it is the load-bearing wall of this architecture |
-| Voice AI in Urdu is harder / less mature than English | Validate vendor TTS/STT Urdu quality before committing; allow English-first launch per open question #4 |
+| Database-per-tenant operational complexity outgrows a small team (now solo + AI-assisted, per decision #6) | Invest early in the provisioning/migration automation (Phase 9) rather than treating it as later polish — it is the load-bearing wall of this architecture |
+| **In-Pakistan data residency requirement (decision #7) may not have a mature, cheap, database-per-tenant-friendly hosting option** | First task of Phase 9: survey real Pakistan-based hosting providers before any further backend design; if no provider supports the automation this architecture needs, we revisit either the hosting approach or the strict per-tenant-database model for this specific constraint |
+| Voice AI in Urdu (decision #4) is less mature than English tooling | Validate vendor TTS/STT Urdu quality with real audio samples before committing to it as a shipped feature; keep an English-fallback path available if Urdu quality isn't good enough at launch |
 | Feature scope (16 phases, dozens of modules) invites building too much before revenue | V1/V2/V3 waves in §8 exist specifically to force sequencing; Phase 13 roadmap will hold this line |
 | Local payment gateway integrations (JazzCash/EasyPaisa) have real-world approval/integration friction | Start the merchant-account/integration process in parallel with engineering, not after |
 | Multi-campus/school-group retrofit risk | Data model accounts for it from Phase 5, per §9, even though UI ships later |
 
 ---
 
-**Next step:** once you've reviewed this and answered (or explicitly deferred)
-the open questions in §13, we proceed to **Phase 2 — Feature Breakdown**.
+**Next step:** decisions in §13 are confirmed — proceed to
+**Phase 2 — Feature Breakdown**.
