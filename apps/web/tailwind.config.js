@@ -15,9 +15,13 @@ module.exports = {
         accent: "var(--accent)",
         "accent-soft": "var(--accent-soft)",
         success: "var(--success)",
+        "success-soft": "var(--success-soft)",
         warning: "var(--warning)",
+        "warning-soft": "var(--warning-soft)",
         critical: "var(--critical)",
+        "critical-soft": "var(--critical-soft)",
         info: "var(--info)",
+        "info-soft": "var(--info-soft)",
       },
       borderRadius: {
         DEFAULT: "8px",

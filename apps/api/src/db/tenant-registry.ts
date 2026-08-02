@@ -16,6 +16,7 @@ type ResolvedTenant = {
   name: string;
   subdomain: string;
   status: string;
+  trialEndsAt: Date | null;
   brandingPrimaryColor: string | null;
   brandingLogoUrl: string | null;
 };
@@ -38,6 +39,7 @@ export async function resolveTenantBySubdomain(
     name: tenant.name,
     subdomain: tenant.subdomain,
     status: tenant.status,
+    trialEndsAt: tenant.trialEndsAt,
     brandingPrimaryColor: tenant.brandingPrimaryColor,
     brandingLogoUrl: tenant.brandingLogoUrl,
   };

@@ -60,3 +60,16 @@ export const tenantProvisioningEvents = pgTable("tenant_provisioning_events", {
     .notNull()
     .defaultNow(),
 });
+
+// Phase 5 §2.6 — platform-operator accounts, entirely separate from any
+// tenant's users table. Added in Milestone 1 for the basic Super Admin
+// console (Phase 13 M1 exit criteria).
+export const superAdmins = pgTable("super_admins", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  fullName: text("full_name").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});

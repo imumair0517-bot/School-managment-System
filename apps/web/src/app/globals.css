@@ -17,9 +17,13 @@
   --accent-soft: #e4f0ec;
 
   --success: #2e7d4f;
+  --success-soft: #e3f1e8;
   --warning: #9c6f22;
+  --warning-soft: #f6ecd9;
   --critical: #b23b2e;
+  --critical-soft: #f6e3e0;
   --info: #3b6fa0;
+  --info-soft: #e3ebf4;
 }
 
 body {

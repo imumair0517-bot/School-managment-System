@@ -1,9 +1,24 @@
-// Worker service — Phase 9 §1/§5. Empty on purpose for Milestone 0: the
-// first real jobs (tenant provisioning, per Phase 9 §3) get wired up in
-// Milestone 1, backed by the queue client this file will host
-// (packages/config's Redis connection, BullMQ per Phase 1 §11).
-//
-// It exists as its own deployable from day one so the API/worker split
-// from Phase 9 §1 is real in the repo structure, not retrofitted later.
+import { Worker } from "bullmq";
+import { QUEUE_NAMES, type ProvisionTenantJob } from "@school-os/jobs";
+import { redisConnection } from "./queue/connection.js";
+import { provisionTenant } from "./jobs/provisioning/provisionTenant.js";
 
-console.log("[worker] no jobs registered yet — see Milestone 1 (Phase 13)");
+// Worker service — Phase 9 §1/§5. Milestone 1 wires up the first real job
+// type: tenant provisioning (Phase 9 §3). Notification delivery, Voice AI
+// orchestration, and bulk report generation are added in later milestones.
+
+const provisioningWorker = new Worker<ProvisionTenantJob>(
+  QUEUE_NAMES.tenantProvisioning,
+  async (job) => provisionTenant(job.data),
+  { connection: redisConnection, concurrency: 3 },
+);
+
+provisioningWorker.on("completed", (job) => {
+  console.log(`[worker] provisioning job ${job.id} completed`);
+});
+
+provisioningWorker.on("failed", (job, err) => {
+  console.error(`[worker] provisioning job ${job?.id} failed:`, err.message);
+});
+
+console.log("[worker] listening for tenant-provisioning jobs");

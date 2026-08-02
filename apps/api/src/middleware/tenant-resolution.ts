@@ -37,5 +37,26 @@ export async function tenantResolutionMiddleware(
     });
   }
 
+  // Phase 13 M1 scope: "7-day trial enforcement." Full billing/dunning
+  // (Phase 1 §7) doesn't exist yet, so this is the honest slice of it that
+  // does: a trial past its end date blocks further access rather than
+  // running forever unenforced. Provisioning-in-progress also blocks
+  // access, since there's no tenant database to serve requests from yet.
+  if (tenant.status === "provisioning") {
+    return reply.code(423).send({
+      error: { code: "tenant_provisioning", message: "This school's account is still being set up" },
+    });
+  }
+  if (tenant.status === "trial" && tenant.trialEndsAt && tenant.trialEndsAt < new Date()) {
+    return reply.code(402).send({
+      error: { code: "trial_expired", message: "This school's free trial has ended" },
+    });
+  }
+  if (tenant.status === "suspended" || tenant.status === "cancelled") {
+    return reply.code(403).send({
+      error: { code: "tenant_inactive", message: "This school's account is not active" },
+    });
+  }
+
   req.tenant = tenant;
 }

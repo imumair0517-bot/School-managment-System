@@ -19,5 +19,6 @@ export const tenantSignupSchema = z.object({
   ownerName: z.string().min(2).max(120),
   ownerEmail: z.string().email(),
   ownerPhone: z.string().min(7).max(20),
+  ownerPassword: z.string().min(8),
 });
 export type TenantSignupInput = z.infer<typeof tenantSignupSchema>;

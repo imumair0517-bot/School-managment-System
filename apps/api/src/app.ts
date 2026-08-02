@@ -2,6 +2,7 @@ import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import { identityRoutes } from "./modules/identity/routes.js";
+import { platformRoutes } from "./modules/platform/routes.js";
 
 export function buildApp() {
   const app = Fastify({ logger: true });
@@ -21,6 +22,7 @@ export function buildApp() {
   app.get("/health", async () => ({ ok: true }));
 
   app.register(identityRoutes);
+  app.register(platformRoutes);
 
   return app;
 }
