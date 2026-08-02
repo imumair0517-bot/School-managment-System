@@ -211,7 +211,7 @@ Single-row (or key/value) table — the data behind Phase 2 §H "Settings".
 |---|---|---|
 | admission_inquiries | id, applicant_name, guardian_contact, class_applying_for, stage (`inquiry`,`applicant`,`interview`,`admitted`,`enrolled`,`rejected`,`waitlisted`), source | drives Flow 2 |
 | admission_documents | id, inquiry_id, document_type, file_ref | |
-| students | id, user_id (nullable — students below portal age may have no login), full_name, dob, gender, cnic_bform, current_section_id, status (`active`,`transferred`,`graduated`,`suspended`), admission_date | |
+| students | id, user_id (required — every student gets a login, per confirmed decision below), full_name, dob, gender, cnic_bform, current_section_id, status (`active`,`transferred`,`graduated`,`suspended`), admission_date | For young students who won't use it themselves yet, the account still exists and its credentials are managed by the guardian (e.g. guardian sets/resets the password) — this is a permissions/UX detail for later phases, not a data-model gap |
 | student_status_history | id, student_id, previous_status, new_status, reason, effective_date, changed_by | supports Phase 3 B2 transfer/leave handling |
 
 ### 4.3 Attendance
@@ -272,15 +272,19 @@ Single-row (or key/value) table — the data behind Phase 2 §H "Settings".
 - `report_cards` → `report_card_remarks` is where the AI-approval rule
   (Phase 3 E1) becomes a hard data constraint, not just process.
 
-## 6. Open design questions for Phase 6 (ER Diagram) to resolve visually
+## 6. Design questions — resolved
 
-- Whether `students` always requires a `user_id` (a login) or can exist
-  without one for younger grades not using the Student Portal — leaning
-  "nullable," confirmed as a note above, worth a visual gut-check in the ER
-  diagram.
-- Whether `sections` truly reset every `academic_session` (clean slate,
-  re-assign every student each year) or carry forward with only promotions
-  as deltas — affects how heavy the year-end promotion write operation is.
+Both confirmed:
+
+- **Every student has a login (`user_id` on `students` is required, not
+  nullable),** even at ages where the guardian is the one actually using
+  it. Table above updated accordingly.
+- **Sections reset fresh every academic session** — `sections` are created
+  new each year and students are placed into them at promotion time (Flow 2,
+  Phase 4), rather than a persistent "8-A" carrying different students across
+  years under the same identity. This is what the schema in §4.1 already
+  assumed (`sections.academic_session_id`); now explicitly confirmed rather
+  than a design lean.
 
 ## Next step
 
