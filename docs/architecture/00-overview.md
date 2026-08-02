@@ -22,7 +22,7 @@ reviewed and approved.
 | 11 | [UI Design System](./11-ui-design-system.md) | ✅ Draft for review |
 | 12 | [Component Library](./12-component-library.md) | ✅ Draft for review |
 | 13 | [Development Roadmap](./13-development-roadmap.md) | ✅ Draft for review |
-| 14 | Testing Strategy | ⏳ Not started |
+| 14 | [Testing Strategy](./14-testing-strategy.md) | ✅ Draft for review |
 | 15 | Deployment Strategy | ⏳ Not started |
 | 16 | Documentation Plan | ⏳ Not started |
 
