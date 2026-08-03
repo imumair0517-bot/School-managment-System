@@ -167,14 +167,18 @@ export const students = pgTable("students", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Milestone 9 resolves half of the deferral this column used to note —
+// channel preference is now real and read by both fee reminders and
+// absence alerts. Voice AI opt-out stays deferred until Milestone 10
+// actually builds Voice AI (and "voice_ai" isn't a selectable preference
+// value yet for the same reason: there's nothing to route it to).
+export const notificationChannelPreferenceEnum = pgEnum("notification_channel_preference", ["whatsapp", "sms", "all"]);
+
 export const guardians = pgTable("guardians", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull().unique().references(() => users.id),
   cnic: text("cnic"),
-  // Communication channel preference / Voice AI opt-out (Phase 5 §3.3) are
-  // deferred until the Communication module (Milestone 9) actually reads
-  // them — same "don't add unused columns" call made elsewhere in this
-  // file.
+  notificationChannelPreference: notificationChannelPreferenceEnum("notification_channel_preference").notNull().default("all"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -495,6 +499,44 @@ export const notifications = pgTable("notifications", {
   status: notificationStatusEnum("status").notNull().default("queued"),
   body: text("body").notNull(),
   errorMessage: text("error_message"),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// --- Milestone 9: Communication Core (Phase 5 §4.3 leave_requests, Phase 2 §D, Flow 3) ---
+
+// "pre-approved leave suppresses absence-alert per Flow 3" (Phase 5
+// §4.3's own note) — the exact table that section was left unbuilt for
+// until a module existed that would actually read it. That module is
+// this one: the attendance submit handler checks this table before
+// dispatching a same-day absence alert.
+export const leaveRequests = pgTable("leave_requests", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  studentId: uuid("student_id").notNull().references(() => students.id),
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date").notNull(),
+  reason: text("reason").notNull(),
+  approvedBy: uuid("approved_by").notNull().references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Phase 2 §D1/D3: targeting is school/class/section — deliberately no
+// "role" scope yet (Phase 2's own phrase leaves it ambiguous whether that
+// meant a staff role or a guardian/student role, and every concrete AC
+// example given is class/section-scoped) since our channel-delivery model
+// is guardian-phone-based; a staff-role broadcast would need a different
+// delivery path (users.phone, not guardians.id) that nothing here needs
+// yet. target_ref is null for school-wide, a class_id or section_id
+// otherwise.
+export const announcementTargetScopeEnum = pgEnum("announcement_target_scope", ["school", "class", "section"]);
+
+export const announcements = pgTable("announcements", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  targetScope: announcementTargetScopeEnum("target_scope").notNull(),
+  targetRef: uuid("target_ref"),
+  createdBy: uuid("created_by").notNull().references(() => users.id),
   sentAt: timestamp("sent_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

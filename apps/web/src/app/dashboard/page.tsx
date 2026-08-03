@@ -19,6 +19,7 @@ type InvoiceItem = {
   dueDate: string;
   overdue: boolean;
 };
+type NotificationItem = { id: string; type: string; channel: string; status: string; body: string; sentAt: string | null };
 
 const STATUS_STYLE: Record<string, string> = {
   present: "bg-success-soft text-success",
@@ -54,10 +55,10 @@ export default function DashboardPage() {
       </p>
 
       <div className="mt-8 rounded border border-dashed border-border p-8 text-center text-ink-muted">
-        Nothing here yet on Home — communication and Voice AI get built in
-        the milestones that follow (Phase 13). Admissions, Students,
-        Attendance, Timetable, Homework, Exams/Report Cards, and Finance
-        are live now — see the menu above.
+        Nothing here yet on Home — Voice AI gets built in the milestones
+        that follow (Phase 13). Admissions, Students, Attendance,
+        Timetable, Homework, Exams/Report Cards, Finance, and
+        Communication are live now — see the menu above.
       </div>
     </div>
   );
@@ -79,13 +80,98 @@ function ParentHome() {
   return (
     <div className="flex flex-col gap-8">
       <h2 className="text-lg font-semibold text-ink">My Children</h2>
+      <NotificationPreference />
       <InvoicesList />
       <ReportCardsList />
       <HomeworkList />
       {children.map((child) => (
         <AttendanceHistory key={child.id} title={`${child.fullName} — ${child.sectionName ?? "no section"}`} studentId={child.id} />
       ))}
+      <NotificationsHistory />
     </div>
+  );
+}
+
+const CHANNEL_LABELS: Record<string, string> = { whatsapp: "WhatsApp only", sms: "SMS only", all: "WhatsApp and SMS" };
+
+// Milestone 9's own self-service piece (Phase 2 §E's Parent Portal
+// "communication preferences") — updates take effect on the very next
+// fee reminder / absence alert / announcement sent, since every send
+// reads this at dispatch time (see dispatchToGuardian's own note).
+function NotificationPreference() {
+  const [guardianId, setGuardianId] = useState<string | null>(null);
+  const [preference, setPreference] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    api.getMyPreference().then((res) => {
+      setGuardianId(res.guardianId);
+      setPreference(res.notificationChannelPreference);
+    });
+  }, []);
+
+  async function handleChange(value: string) {
+    if (!guardianId) return;
+    setSaving(true);
+    try {
+      await api.updateGuardianPreference(guardianId, value);
+      setPreference(value);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!guardianId || !preference) return null;
+
+  return (
+    <section>
+      <h3 className="text-sm font-semibold text-ink">Notification Preference</h3>
+      <select
+        value={preference}
+        disabled={saving}
+        onChange={(e) => handleChange(e.target.value)}
+        className="mt-2 rounded border border-border bg-bg px-3 py-2 text-sm text-ink outline-none focus:border-accent disabled:opacity-60"
+      >
+        {Object.entries(CHANNEL_LABELS).map(([value, label]) => (
+          <option key={value} value={value}>
+            {label}
+          </option>
+        ))}
+      </select>
+    </section>
+  );
+}
+
+function NotificationsHistory() {
+  const [items, setItems] = useState<NotificationItem[] | null>(null);
+
+  useEffect(() => {
+    api.getMyNotifications().then((res) => setItems(res.notifications));
+  }, []);
+
+  if (!items) return null;
+
+  return (
+    <section>
+      <h3 className="text-sm font-semibold text-ink">Messages</h3>
+      {items.length === 0 ? (
+        <p className="mt-2 text-sm text-ink-muted">No messages yet.</p>
+      ) : (
+        <ul className="mt-2 flex flex-col gap-2">
+          {items.slice(0, 20).map((n) => (
+            <li key={n.id} className="rounded border border-border bg-surface p-3 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-ink">
+                  {n.type.replace("_", " ")} via {n.channel}
+                </span>
+                <span className="text-ink-muted">{n.status}</span>
+              </div>
+              <p className="mt-1 whitespace-pre-wrap text-ink-muted">{n.body}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

@@ -68,7 +68,8 @@ export default function AttendancePage() {
     try {
       const entries = students.map((s) => ({ studentId: s.id, status: statuses[s.id] ?? "present" }));
       const res = await api.submitAttendance(sectionId, date, entries);
-      setSavedMessage(res.lateEdit ? "Saved (this is a correction to a past date)." : "Attendance saved.");
+      const base = res.lateEdit ? "Saved (this is a correction to a past date)." : "Attendance saved.";
+      setSavedMessage(res.absenceAlertsSent > 0 ? `${base} ${res.absenceAlertsSent} absence alert(s) sent to guardians.` : base);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save attendance");
     } finally {

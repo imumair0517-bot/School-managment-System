@@ -201,4 +201,16 @@ export const api = {
   sendFeeReminders: (excludeTagId?: string) =>
     apiFetch("/v1/invoices/send-reminders", { method: "POST", body: JSON.stringify({ excludeTagId }) }),
   listNotifications: (type?: string) => apiFetch(`/v1/notifications${type ? `?type=${type}` : ""}`),
+
+  // Communication (Milestone 9 — leave requests, channel preference, announcements)
+  createLeaveRequest: (input: { studentId: string; startDate: string; endDate: string; reason: string }) =>
+    apiFetch("/v1/leave-requests", { method: "POST", body: JSON.stringify(input) }),
+  listLeaveRequests: (studentId?: string) => apiFetch(`/v1/leave-requests${studentId ? `?studentId=${studentId}` : ""}`),
+  updateGuardianPreference: (guardianId: string, channelPreference: string) =>
+    apiFetch(`/v1/guardians/${guardianId}/preferences`, { method: "PATCH", body: JSON.stringify({ channelPreference }) }),
+  getMyPreference: () => apiFetch("/v1/guardians/me/preferences"),
+  createAnnouncement: (input: { title: string; body: string; targetScope: string; targetRef?: string }) =>
+    apiFetch("/v1/announcements", { method: "POST", body: JSON.stringify(input) }),
+  listAnnouncements: () => apiFetch("/v1/announcements"),
+  getMyNotifications: () => apiFetch("/v1/notifications/mine"),
 };

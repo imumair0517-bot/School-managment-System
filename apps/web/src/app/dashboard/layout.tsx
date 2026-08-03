@@ -42,6 +42,11 @@ function Shell({ children }: { children: React.ReactNode }) {
     // is a staff (write) page; a parent's own invoices/balance are shown
     // on Home instead.
     { href: "/dashboard/finance", label: "Finance", show: me.permissions.finance === "write" },
+    // Absence alerts fire automatically from Attendance itself — this
+    // page is for sending announcements and recording leave requests, a
+    // staff (write) action; a parent's own notification history and
+    // channel preference are shown on Home instead.
+    { href: "/dashboard/communication", label: "Communication", show: me.permissions.communication === "write" },
     { href: "/dashboard/timetable", label: "Timetable", show: me.permissions.academic !== "none" },
     { href: "/dashboard/academic", label: "Academic Setup", show: me.permissions.academic === "write" },
     { href: "/dashboard/team", label: "Team", show: me.permissions.users !== "none" },

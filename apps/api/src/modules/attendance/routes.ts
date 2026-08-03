@@ -8,15 +8,21 @@ import { requireAuth } from "../../middleware/auth.js";
 import { requirePermission } from "../../middleware/permissions.js";
 import { canViewStudentAttendance } from "../../db/student-access.js";
 import { logAuditEvent } from "../../db/audit.js";
+import { dispatchToGuardian } from "../../services/messaging/dispatch.js";
+import { hasCoveringLeave } from "../communication/routes.js";
 
 function todayLocalDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
-// Implements Flow 3's marking half (Phase 4) and Phase 3 B2. The
-// notification trigger on absence (the rest of Flow 3) waits for the
-// Communication module (Milestone 9) — this module's job ends at "the
-// record exists and is visible to the right people."
+// Implements Flow 3 end to end (Phase 4) and Phase 3 B2/B5. The
+// notification half of Flow 3 (Milestone 9) fires synchronously right
+// after a successful submit — no delayed job queue exists, so unlike the
+// flow diagram's "queue notification job" step, a same-day correction
+// made *after* submitting can't un-send an alert that already went out;
+// only the pre-submit state (was this student *already* absent before
+// this save?) is used to avoid re-alerting on a same-day re-save that
+// doesn't actually change anything.
 export async function attendanceRoutes(app: FastifyInstance) {
   const auth = [tenantResolutionMiddleware, requireAuth];
 
@@ -47,6 +53,14 @@ export async function attendanceRoutes(app: FastifyInstance) {
         .from(studentAttendance)
         .where(and(eq(studentAttendance.sectionId, sectionId), eq(studentAttendance.date, date)));
       const existingByStudent = new Map(existing.map((e) => [e.studentId, e]));
+
+      // Computed before the write so it reflects the *transition* (not
+      // absent → absent), not just the new state — a teacher re-saving a
+      // section where a student was already marked absent must not
+      // re-alert the guardian a second time for the same day.
+      const newlyAbsentStudentIds = entries
+        .filter((entry) => entry.status === "absent" && existingByStudent.get(entry.studentId)?.status !== "absent")
+        .map((entry) => entry.studentId);
 
       await db.transaction(async (tx) => {
         for (const entry of entries) {
@@ -82,7 +96,48 @@ export async function attendanceRoutes(app: FastifyInstance) {
         detail: { date, studentCount: entries.length, lateEdit: isLateEdit },
       });
 
-      return reply.send({ ok: true, lateEdit: isLateEdit });
+      let absenceAlertsSent = 0;
+      if (newlyAbsentStudentIds.length > 0) {
+        const [absentStudentRows, tenantLinks, tenantGuardians] = await Promise.all([
+          db.select().from(students).where(inArray(students.id, newlyAbsentStudentIds)),
+          db.select().from(studentGuardians).where(inArray(studentGuardians.studentId, newlyAbsentStudentIds)),
+          db.select().from(guardians),
+        ]);
+        const studentById = new Map(absentStudentRows.map((s) => [s.id, s]));
+        const guardianById = new Map(tenantGuardians.map((g) => [g.id, g]));
+
+        for (const studentId of newlyAbsentStudentIds) {
+          // Flow 3's own edge case: pre-approved leave suppresses the
+          // alert entirely, even though today's status is "absent" not
+          // "leave" (the teacher marks the actual daily state; the leave
+          // request is what explains it).
+          const covered = await hasCoveringLeave(tenant.id, studentId, date);
+          if (covered) continue;
+
+          const links = tenantLinks.filter((l) => l.studentId === studentId);
+          const primaryLink = links.find((l) => l.isPrimaryBillingContact) ?? links[0];
+          const guardian = primaryLink ? guardianById.get(primaryLink.guardianId) : undefined;
+          if (!guardian) continue;
+
+          const student = studentById.get(studentId)!;
+          const body =
+            `Dear Guardian, this is to inform you that ${student.fullName} was marked absent from ` +
+            `${tenant.name} today (${date}) with no leave request on file. If this is unexpected, ` +
+            `please contact the school office.`;
+
+          const outcome = await dispatchToGuardian({
+            tenantId: tenant.id,
+            guardianId: guardian.id,
+            type: "absence_alert",
+            relatedEntityType: "student",
+            relatedEntityId: studentId,
+            body,
+          });
+          absenceAlertsSent += outcome.sent;
+        }
+      }
+
+      return reply.send({ ok: true, lateEdit: isLateEdit, absenceAlertsSent });
     },
   );
 

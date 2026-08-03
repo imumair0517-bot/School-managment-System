@@ -15,8 +15,6 @@ import {
   studentGuardians,
   userPermissionOverrides,
   studentTags,
-  tags,
-  notifications,
   users,
 } from "@school-os/db-tenant";
 import {
@@ -33,7 +31,7 @@ import { requireAuth } from "../../middleware/auth.js";
 import { requirePermission } from "../../middleware/permissions.js";
 import { canViewStudentInvoices } from "../../db/student-access.js";
 import { logAuditEvent } from "../../db/audit.js";
-import { sendWhatsAppMessage } from "../../services/messaging/whatsappSender.js";
+import { dispatchToGuardian } from "../../services/messaging/dispatch.js";
 
 const POLICY_ROLES = new Set(["school_owner", "principal"]);
 
@@ -581,23 +579,26 @@ export async function financeRoutes(app: FastifyInstance) {
           `outstanding school fee of Rs. ${owed.balance} was due on ${owed.earliestDueDate} and remains unpaid. ` +
           `Kindly arrange payment at your earliest convenience.`;
 
-        const result = await sendWhatsAppMessage(guardianUser.phone, body);
-        if (result.simulated) anySimulated = true;
-
-        await db.insert(notifications).values({
-          recipientGuardianId: guardian.id,
+        // Milestone 9: respects the guardian's own WhatsApp/SMS/all
+        // preference rather than always sending WhatsApp — see the
+        // dispatch helper's own note on why every guardian-facing send in
+        // this codebase should go through it.
+        const outcome = await dispatchToGuardian({
+          tenantId: tenant.id,
+          guardianId: guardian.id,
           type: "fee_reminder",
-          channel: "whatsapp",
           relatedEntityType: "student",
           relatedEntityId: studentId,
-          status: result.status,
           body,
-          errorMessage: result.status === "failed" ? result.error : null,
-          sentAt: result.status === "sent" ? new Date() : null,
         });
+        if (outcome.reason === "no_phone") {
+          skipped.push({ studentId, studentName: student.fullName, reason: "no_guardian_phone" });
+          continue;
+        }
 
-        if (result.status === "sent") sent++;
-        else failed++;
+        sent += outcome.sent;
+        failed += outcome.failed;
+        if (outcome.simulated) anySimulated = true;
       }
 
       await logAuditEvent(tenant.id, {
@@ -612,36 +613,6 @@ export async function financeRoutes(app: FastifyInstance) {
     },
   );
 
-  app.get("/v1/notifications", { preHandler: [...auth, requirePermission("finance", "read")] }, async (req, reply) => {
-    const { type } = req.query as { type?: string };
-    const db = await getTenantDbConnection(req.tenant!.id);
-    const [rows, guardianRows, userRows] = await Promise.all([
-      db.select().from(notifications),
-      db.select().from(guardians),
-      db.select().from(users),
-    ]);
-    const guardianById = new Map(guardianRows.map((g) => [g.id, g]));
-    const userById = new Map(userRows.map((u) => [u.id, u]));
-    const filtered = type ? rows.filter((n) => n.type === type) : rows;
-
-    return reply.send({
-      notifications: filtered
-        .sort((a, b) => (b.createdAt > a.createdAt ? 1 : -1))
-        .map((n) => {
-          const guardian = guardianById.get(n.recipientGuardianId);
-          const guardianUser = guardian ? userById.get(guardian.userId) : undefined;
-          return {
-            id: n.id,
-            recipientName: guardianUser?.fullName ?? null,
-            type: n.type,
-            channel: n.channel,
-            status: n.status,
-            body: n.body,
-            errorMessage: n.errorMessage,
-            sentAt: n.sentAt,
-            createdAt: n.createdAt,
-          };
-        }),
-    });
-  });
+  // GET /v1/notifications lives in the communication module now (Milestone
+  // 9) — it's a shared log across every message type, not finance-owned.
 }

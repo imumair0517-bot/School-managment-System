@@ -12,6 +12,7 @@ import { examsRoutes } from "./modules/exams/routes.js";
 import { reportCardsRoutes } from "./modules/report-cards/routes.js";
 import { financeRoutes } from "./modules/finance/routes.js";
 import { tagsRoutes } from "./modules/tags/routes.js";
+import { communicationRoutes } from "./modules/communication/routes.js";
 
 export function buildApp() {
   const app = Fastify({ logger: true });
@@ -45,6 +46,7 @@ export function buildApp() {
   app.register(reportCardsRoutes);
   app.register(financeRoutes);
   app.register(tagsRoutes);
+  app.register(communicationRoutes);
 
   return app;
 }
