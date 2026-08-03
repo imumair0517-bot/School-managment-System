@@ -37,3 +37,38 @@ export async function canViewStudentAttendance(
 
   return false;
 }
+
+// Same "own record only" rule as canViewStudentAttendance, applied to
+// report cards (Phase 7 §5.4-equivalent for Flow 4): staff with exams:read
+// can see any student's report card, a parent/student only their own —
+// and only once it's published (checked separately by the caller, since
+// that's a status check, not an identity check).
+export async function canViewStudentReportCard(
+  tenantId: string,
+  authUser: { sub: string; role: string },
+  override: PermissionOverride | null | undefined,
+  studentId: string,
+): Promise<boolean> {
+  const role = authUser.role as UserRole;
+
+  if (hasPermission(role, override, "exams", "read") && role !== "parent" && role !== "student") {
+    return true;
+  }
+
+  const db = await getTenantDbConnection(tenantId);
+
+  if (role === "parent") {
+    const guardianRows = await db.select().from(guardians).where(eq(guardians.userId, authUser.sub));
+    const guardian = guardianRows[0];
+    if (!guardian) return false;
+    const links = await db.select().from(studentGuardians).where(eq(studentGuardians.studentId, studentId));
+    return links.some((l) => l.guardianId === guardian.id);
+  }
+
+  if (role === "student") {
+    const studentRows = await db.select().from(students).where(eq(students.id, studentId));
+    return studentRows[0]?.userId === authUser.sub;
+  }
+
+  return false;
+}

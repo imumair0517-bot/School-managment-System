@@ -8,6 +8,8 @@ import { academicRoutes } from "./modules/academic/routes.js";
 import { admissionsRoutes } from "./modules/admissions/routes.js";
 import { attendanceRoutes } from "./modules/attendance/routes.js";
 import { homeworkRoutes } from "./modules/homework/routes.js";
+import { examsRoutes } from "./modules/exams/routes.js";
+import { reportCardsRoutes } from "./modules/report-cards/routes.js";
 
 export function buildApp() {
   const app = Fastify({ logger: true });
@@ -37,6 +39,8 @@ export function buildApp() {
   app.register(admissionsRoutes);
   app.register(attendanceRoutes);
   app.register(homeworkRoutes);
+  app.register(examsRoutes);
+  app.register(reportCardsRoutes);
 
   return app;
 }

@@ -33,6 +33,11 @@ function Shell({ children }: { children: React.ReactNode }) {
     // Same reasoning as Attendance — assigning homework is a staff (write)
     // page; a parent/student's own homework is shown on Home.
     { href: "/dashboard/homework", label: "Homework", show: me.permissions.homework === "write" },
+    // Same reasoning again — entering marks and publishing report cards is
+    // a staff (write) page; a parent/student's own published report cards
+    // are shown on Home instead.
+    { href: "/dashboard/exams", label: "Exams", show: me.permissions.exams === "write" },
+    { href: "/dashboard/report-cards", label: "Report Cards", show: me.permissions.exams === "write" },
     { href: "/dashboard/timetable", label: "Timetable", show: me.permissions.academic !== "none" },
     { href: "/dashboard/academic", label: "Academic Setup", show: me.permissions.academic === "write" },
     { href: "/dashboard/team", label: "Team", show: me.permissions.users !== "none" },

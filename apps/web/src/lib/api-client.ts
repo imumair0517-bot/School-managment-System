@@ -137,4 +137,31 @@ export const api = {
     apiFetch("/v1/homework", { method: "POST", body: JSON.stringify(input) }),
   getSectionHomework: (sectionId: string) => apiFetch(`/v1/sections/${sectionId}/homework`),
   getMyHomework: () => apiFetch("/v1/homework/mine"),
+
+  // Exams, marks, grading (Milestone 6, Phase 5 §4.4, Flow 4)
+  listExams: () => apiFetch("/v1/exams"),
+  createExam: (input: { academicSessionId: string; name: string; term?: string }) =>
+    apiFetch("/v1/exams", { method: "POST", body: JSON.stringify(input) }),
+  listExamSubjects: (examId: string) => apiFetch(`/v1/exams/${examId}/subjects`),
+  createExamSubject: (examId: string, input: { subjectId: string; classId: string; totalMarks: number; passingMarks: number }) =>
+    apiFetch(`/v1/exams/${examId}/subjects`, { method: "POST", body: JSON.stringify(input) }),
+  getMarks: (examSubjectId: string) => apiFetch(`/v1/exam-subjects/${examSubjectId}/marks`),
+  saveMarks: (examSubjectId: string, entries: { studentId: string; marksObtained: number }[]) =>
+    apiFetch(`/v1/exam-subjects/${examSubjectId}/marks`, { method: "PUT", body: JSON.stringify({ entries }) }),
+  submitMarks: (examSubjectId: string) => apiFetch(`/v1/exam-subjects/${examSubjectId}/marks/submit`, { method: "POST" }),
+  reopenMarks: (examSubjectId: string) => apiFetch(`/v1/exam-subjects/${examSubjectId}/marks/reopen`, { method: "POST" }),
+
+  // Report cards (Milestone 6, Flow 4, the AI generate/approve pattern for remarks)
+  generateReportCards: (examId: string, sectionId: string) =>
+    apiFetch(`/v1/exams/${examId}/report-cards/generate`, { method: "POST", body: JSON.stringify({ sectionId }) }),
+  listReportCards: (examId: string, sectionId?: string) =>
+    apiFetch(`/v1/exams/${examId}/report-cards${sectionId ? `?sectionId=${sectionId}` : ""}`),
+  getReportCard: (reportCardId: string) => apiFetch(`/v1/report-cards/${reportCardId}`),
+  generateRemark: (reportCardId: string, teacherNote?: string) =>
+    apiFetch(`/v1/report-cards/${reportCardId}/remarks/generate`, { method: "POST", body: JSON.stringify({ teacherNote }) }),
+  approveRemark: (reportCardId: string, text: string, aiGenerated?: boolean) =>
+    apiFetch(`/v1/report-cards/${reportCardId}/remarks/approve`, { method: "POST", body: JSON.stringify({ text, aiGenerated }) }),
+  publishReportCards: (examId: string, sectionId: string) =>
+    apiFetch(`/v1/exams/${examId}/report-cards/publish`, { method: "POST", body: JSON.stringify({ sectionId }) }),
+  getMyReportCards: () => apiFetch("/v1/report-cards/mine"),
 };

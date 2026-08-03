@@ -5,3 +5,5 @@ export * from "./admissions.js";
 export * from "./timetable.js";
 export * from "./attendance.js";
 export * from "./homework.js";
+export * from "./exams.js";
+export * from "./report-cards.js";

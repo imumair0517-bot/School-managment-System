@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { api } from "@/lib/api-client";
 import { useMe } from "@/lib/me-context";
 
 type Child = { id: string; fullName: string; sectionName: string | null };
 type AttendanceRecord = { date: string; status: string };
 type HomeworkItem = { id: string; subjectName: string | null; description: string; dueDate: string };
+type ReportCardItem = { id: string; studentName: string | null; examName: string | null; percentage: number; division: string };
 
 const STATUS_STYLE: Record<string, string> = {
   present: "bg-success-soft text-success",
@@ -27,6 +29,7 @@ export default function DashboardPage() {
   if (me.user.role === "student" && me.studentId) {
     return (
       <div className="flex flex-col gap-8">
+        <ReportCardsList />
         <HomeworkList />
         <AttendanceHistory title="My Attendance" studentId={me.studentId} />
       </div>
@@ -41,9 +44,9 @@ export default function DashboardPage() {
       </p>
 
       <div className="mt-8 rounded border border-dashed border-border p-8 text-center text-ink-muted">
-        Nothing here yet on Home — exams and fees get built in the
-        milestones that follow (Phase 13). Admissions, Students, Attendance,
-        and Timetable are live now — see the menu above.
+        Nothing here yet on Home — fees get built in the milestones that
+        follow (Phase 13). Admissions, Students, Attendance, Timetable,
+        Homework, and Exams/Report Cards are live now — see the menu above.
       </div>
     </div>
   );
@@ -65,11 +68,52 @@ function ParentHome() {
   return (
     <div className="flex flex-col gap-8">
       <h2 className="text-lg font-semibold text-ink">My Children</h2>
+      <ReportCardsList />
       <HomeworkList />
       {children.map((child) => (
         <AttendanceHistory key={child.id} title={`${child.fullName} — ${child.sectionName ?? "no section"}`} studentId={child.id} />
       ))}
     </div>
+  );
+}
+
+// Milestone 6's exit criteria for Flow 4: a parent/student sees a
+// published report card. Only ever shows published ones — the API itself
+// filters drafts out (see /v1/report-cards/mine's own note).
+function ReportCardsList() {
+  const [items, setItems] = useState<ReportCardItem[] | null>(null);
+
+  useEffect(() => {
+    api.getMyReportCards().then((res) => setItems(res.reportCards));
+  }, []);
+
+  if (!items) return null;
+
+  return (
+    <section>
+      <h3 className="text-sm font-semibold text-ink">Report Cards</h3>
+      {items.length === 0 ? (
+        <p className="mt-2 text-sm text-ink-muted">No report cards published yet.</p>
+      ) : (
+        <ul className="mt-2 flex flex-col gap-2">
+          {items.map((rc) => (
+            <li key={rc.id}>
+              <Link
+                href={`/dashboard/report-cards/${rc.id}`}
+                className="flex items-center justify-between rounded border border-border bg-surface p-3 text-sm hover:bg-bg"
+              >
+                <span className="font-medium text-ink">
+                  {rc.studentName} — {rc.examName}
+                </span>
+                <span className="text-ink-muted">
+                  {rc.percentage}% · {rc.division}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

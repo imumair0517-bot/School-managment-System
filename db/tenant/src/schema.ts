@@ -250,3 +250,84 @@ export const homework = pgTable("homework", {
   aiApprovedBy: uuid("ai_approved_by").references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// --- Milestone 6: Exams, Marks, Grading, Report Cards (Phase 5 §4.4-4.5) ---
+
+export const exams = pgTable("exams", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  academicSessionId: uuid("academic_session_id").notNull().references(() => academicSessions.id),
+  name: text("name").notNull(),
+  term: text("term"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const examSubjects = pgTable("exam_subjects", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  examId: uuid("exam_id").notNull().references(() => exams.id),
+  subjectId: uuid("subject_id").notNull().references(() => subjects.id),
+  classId: uuid("class_id").notNull().references(() => classes.id),
+  totalMarks: integer("total_marks").notNull(),
+  passingMarks: integer("passing_marks").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const marks = pgTable("marks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  examSubjectId: uuid("exam_subject_id").notNull().references(() => examSubjects.id),
+  studentId: uuid("student_id").notNull().references(() => students.id),
+  marksObtained: integer("marks_obtained").notNull(),
+  enteredBy: uuid("entered_by").notNull().references(() => users.id),
+  submitted: boolean("submitted").notNull().default(false),
+  reopenedAt: timestamp("reopened_at", { withTimezone: true }),
+  reopenedBy: uuid("reopened_by").references(() => users.id),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// The "grading engine as data, not hardcoded logic" (Phase 5 §4.4): one
+// table drives both a per-subject letter grade (bandType 'subject_grade':
+// A1/A/B/C/D/E) and the report card's overall division (bandType
+// 'division': First/Second/Third/Fail) from a percentage, seeded with
+// Matric/Lahore Board bands at provisioning time (Phase 1 decision #3).
+// Adding Cambridge/FBISE later means seeding another `scheme` value here,
+// not touching marks/report-card code.
+export const gradingBandTypeEnum = pgEnum("grading_band_type", ["subject_grade", "division"]);
+
+export const gradingBands = pgTable("grading_bands", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  scheme: text("scheme").notNull().default("matric_lahore_board"),
+  bandType: gradingBandTypeEnum("band_type").notNull(),
+  minPercentage: integer("min_percentage").notNull(),
+  maxPercentage: integer("max_percentage").notNull(),
+  label: text("label").notNull(),
+});
+
+export const reportCardStatusEnum = pgEnum("report_card_status", ["draft", "published", "reopened"]);
+
+export const reportCards = pgTable("report_cards", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  studentId: uuid("student_id").notNull().references(() => students.id),
+  examId: uuid("exam_id").notNull().references(() => exams.id),
+  totalMarksObtained: integer("total_marks_obtained").notNull(),
+  totalMaxMarks: integer("total_max_marks").notNull(),
+  percentage: integer("percentage").notNull(),
+  division: text("division").notNull(),
+  status: reportCardStatusEnum("status").notNull().default("draft"),
+  publishedAt: timestamp("published_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// finalText is nullable until approved — the same data-level enforcement
+// pattern as homework's aiApprovedBy (Phase 3 E1), now applied to the
+// higher-stakes case Milestone 5 was deliberately built to prepare for
+// (Phase 13 M5's own note). Publish (apps/api/src/modules/report-cards)
+// checks finalText IS NOT NULL for every student in the batch before
+// allowing it — not a suggestion, a blocking check.
+export const reportCardRemarks = pgTable("report_card_remarks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  reportCardId: uuid("report_card_id").notNull().unique().references(() => reportCards.id),
+  aiDraftText: text("ai_draft_text"),
+  finalText: text("final_text"),
+  approvedBy: uuid("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+});
