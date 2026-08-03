@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
     "@fastify/cookie": "^11.0.1",
     "@fastify/cors": "^11.3.0",
     "@school-os/db-platform": "*",

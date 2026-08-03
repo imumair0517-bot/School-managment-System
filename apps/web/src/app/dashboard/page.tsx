@@ -6,6 +6,7 @@ import { useMe } from "@/lib/me-context";
 
 type Child = { id: string; fullName: string; sectionName: string | null };
 type AttendanceRecord = { date: string; status: string };
+type HomeworkItem = { id: string; subjectName: string | null; description: string; dueDate: string };
 
 const STATUS_STYLE: Record<string, string> = {
   present: "bg-success-soft text-success",
@@ -23,7 +24,14 @@ export default function DashboardPage() {
   const me = useMe();
 
   if (me.user.role === "parent") return <ParentHome />;
-  if (me.user.role === "student" && me.studentId) return <AttendanceHistory title="My Attendance" studentId={me.studentId} />;
+  if (me.user.role === "student" && me.studentId) {
+    return (
+      <div className="flex flex-col gap-8">
+        <HomeworkList />
+        <AttendanceHistory title="My Attendance" studentId={me.studentId} />
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -57,10 +65,42 @@ function ParentHome() {
   return (
     <div className="flex flex-col gap-8">
       <h2 className="text-lg font-semibold text-ink">My Children</h2>
+      <HomeworkList />
       {children.map((child) => (
         <AttendanceHistory key={child.id} title={`${child.fullName} — ${child.sectionName ?? "no section"}`} studentId={child.id} />
       ))}
     </div>
+  );
+}
+
+function HomeworkList() {
+  const [items, setItems] = useState<HomeworkItem[] | null>(null);
+
+  useEffect(() => {
+    api.getMyHomework().then((res) => setItems(res.homework));
+  }, []);
+
+  if (!items) return null;
+
+  return (
+    <section>
+      <h3 className="text-sm font-semibold text-ink">Homework</h3>
+      {items.length === 0 ? (
+        <p className="mt-2 text-sm text-ink-muted">No homework posted yet.</p>
+      ) : (
+        <ul className="mt-2 flex flex-col gap-2">
+          {items.map((h) => (
+            <li key={h.id} className="rounded border border-border bg-surface p-3 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-ink">{h.subjectName}</span>
+                <span className="text-ink-muted">Due {h.dueDate}</span>
+              </div>
+              <p className="mt-1 whitespace-pre-wrap text-ink-muted">{h.description}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

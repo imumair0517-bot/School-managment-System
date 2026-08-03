@@ -20,7 +20,10 @@ export type UserRole =
 // must not be able to edit school structure (classes/sections), which is
 // also gated by "academic" — one coarse module can't express both. Finance/
 // communication get added when their milestones do (Phase 13).
-export type PermissionModule = "users" | "settings" | "admissions" | "academic" | "attendance";
+// Milestone 5 adds "homework" — teachers author/publish it (write);
+// front-office staff can see what's assigned (read, e.g. to answer a
+// parent's question) without being able to assign it themselves.
+export type PermissionModule = "users" | "settings" | "admissions" | "academic" | "attendance" | "homework";
 
 export type PermissionLevel = "none" | "read" | "write";
 
@@ -36,25 +39,26 @@ export function meetsLevel(have: PermissionLevel, need: PermissionLevel): boolea
 // via a per-user override (user_permission_overrides, Phase 5 §3.2) —
 // never by changing these shared defaults.
 export const ROLE_DEFAULTS: Record<UserRole, Record<PermissionModule, PermissionLevel>> = {
-  school_owner: { users: "write", settings: "write", admissions: "write", academic: "write", attendance: "write" },
-  principal: { users: "write", settings: "write", admissions: "write", academic: "write", attendance: "write" },
+  school_owner: { users: "write", settings: "write", admissions: "write", academic: "write", attendance: "write", homework: "write" },
+  principal: { users: "write", settings: "write", admissions: "write", academic: "write", attendance: "write", homework: "write" },
   // Admin Staff runs admissions day-to-day by default (Phase 2 §B1) and
   // needs to see/manage the structure students enroll into — but not
   // staff accounts or branding (Phase 3 A4's own example). Can also mark/
-  // correct attendance (e.g. covering for an absent teacher).
-  admin_staff: { users: "none", settings: "none", admissions: "write", academic: "write", attendance: "write" },
-  hr: { users: "read", settings: "none", admissions: "none", academic: "none", attendance: "none" },
+  // correct attendance (e.g. covering for an absent teacher), and can see
+  // (not assign) homework for front-desk parent questions.
+  admin_staff: { users: "none", settings: "none", admissions: "write", academic: "write", attendance: "write", homework: "read" },
+  hr: { users: "read", settings: "none", admissions: "none", academic: "none", attendance: "none", homework: "none" },
   // Teachers can look up students/classes (their own roster, later
   // scoped further) but don't run admissions or edit school structure —
-  // they *do* mark attendance daily, which is exactly why it's a
-  // separate module from "academic".
-  teacher: { users: "none", settings: "none", admissions: "none", academic: "read", attendance: "write" },
-  // A guardian reads their own children's attendance (self-scoped at the
-  // API layer, not by this table — see requireOwnStudentOrStaff in
-  // apps/api) — this default just says "parents can see attendance at
-  // all," not "parents can see everyone's."
-  parent: { users: "none", settings: "none", admissions: "none", academic: "none", attendance: "read" },
-  student: { users: "none", settings: "none", admissions: "none", academic: "none", attendance: "read" },
+  // they *do* mark attendance and assign homework daily, which is exactly
+  // why those are separate modules from "academic".
+  teacher: { users: "none", settings: "none", admissions: "none", academic: "read", attendance: "write", homework: "write" },
+  // A guardian reads their own children's attendance/homework (self-scoped
+  // at the API layer, not by this table — see apps/api/src/db/*-access.ts)
+  // — this default just says "parents can see this kind of thing at all,"
+  // not "parents can see everyone's."
+  parent: { users: "none", settings: "none", admissions: "none", academic: "none", attendance: "read", homework: "read" },
+  student: { users: "none", settings: "none", admissions: "none", academic: "none", attendance: "read", homework: "read" },
 };
 
 export type PermissionOverride = Partial<Record<PermissionModule, PermissionLevel>>;

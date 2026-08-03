@@ -30,6 +30,9 @@ function Shell({ children }: { children: React.ReactNode }) {
     // student's own attendance is shown on Home instead (Milestone 4
     // exit criteria only requires that view, not a dedicated nav page).
     { href: "/dashboard/attendance", label: "Attendance", show: me.permissions.attendance === "write" },
+    // Same reasoning as Attendance — assigning homework is a staff (write)
+    // page; a parent/student's own homework is shown on Home.
+    { href: "/dashboard/homework", label: "Homework", show: me.permissions.homework === "write" },
     { href: "/dashboard/timetable", label: "Timetable", show: me.permissions.academic !== "none" },
     { href: "/dashboard/academic", label: "Academic Setup", show: me.permissions.academic === "write" },
     { href: "/dashboard/team", label: "Team", show: me.permissions.users !== "none" },

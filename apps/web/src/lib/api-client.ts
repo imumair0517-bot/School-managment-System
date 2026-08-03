@@ -129,4 +129,12 @@ export const api = {
     apiFetch(`/v1/sections/${sectionId}/attendance`, { method: "POST", body: JSON.stringify({ date, entries }) }),
   getStudentAttendance: (studentId: string) => apiFetch(`/v1/students/${studentId}/attendance`),
   getMyChildren: () => apiFetch("/v1/me/children"),
+
+  // Homework (Milestone 5, Phase 2 §B7, the generate/approve pattern)
+  generateHomework: (input: { sectionId: string; subjectId: string; topic: string }) =>
+    apiFetch("/v1/homework/generate", { method: "POST", body: JSON.stringify(input) }),
+  createHomework: (input: { sectionId: string; subjectId: string; description: string; dueDate: string; aiGenerated?: boolean }) =>
+    apiFetch("/v1/homework", { method: "POST", body: JSON.stringify(input) }),
+  getSectionHomework: (sectionId: string) => apiFetch(`/v1/sections/${sectionId}/homework`),
+  getMyHomework: () => apiFetch("/v1/homework/mine"),
 };

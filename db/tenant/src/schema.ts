@@ -228,3 +228,25 @@ export const studentAttendance = pgTable("student_attendance", {
   markedAt: timestamp("marked_at", { withTimezone: true }).notNull().defaultNow(),
   editedAt: timestamp("edited_at", { withTimezone: true }),
 });
+
+// --- Milestone 5: Homework (Phase 5 §4.4, Phase 2 §B7) ---
+//
+// aiGenerated + aiApprovedBy are the data-level enforcement of Phase 3
+// E1's rule ("AI content always requires human approval"): there is no
+// code path that inserts a row here from the AI-generate endpoint
+// directly (apps/api/src/modules/homework/routes.ts) — a teacher must
+// review the draft and call the normal create endpoint themselves, which
+// is what sets aiApprovedBy. attachment_ref (Phase 5 §4.4) is deferred —
+// no file storage is wired up yet (Phase 1 §11 lists S3-compatible
+// storage as part of the stack, not yet chosen/provisioned).
+export const homework = pgTable("homework", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  sectionId: uuid("section_id").notNull().references(() => sections.id),
+  subjectId: uuid("subject_id").notNull().references(() => subjects.id),
+  teacherId: uuid("teacher_id").notNull().references(() => users.id),
+  description: text("description").notNull(),
+  dueDate: date("due_date").notNull(),
+  aiGenerated: boolean("ai_generated").notNull().default(false),
+  aiApprovedBy: uuid("ai_approved_by").references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
