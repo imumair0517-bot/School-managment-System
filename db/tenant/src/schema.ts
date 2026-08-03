@@ -331,3 +331,112 @@ export const reportCardRemarks = pgTable("report_card_remarks", {
   approvedBy: uuid("approved_by").references(() => users.id),
   approvedAt: timestamp("approved_at", { withTimezone: true }),
 });
+
+// --- Milestone 7: Finance Core (Phase 5 §4.6, Phase 3 C1/C3/C4) ---
+//
+// Amounts are stored as whole-Rupee integers throughout (no paisa/cents
+// handling) — matches how every other numeric measure in this schema
+// (marks, percentages) is a plain integer, and Pakistani school fees are
+// quoted in whole Rupees in practice.
+//
+// invoice_status deliberately drops the 'overdue' value the Phase 5 doc's
+// table listed: persisting it would need a background job to flip
+// statuses as due_dates pass, and nothing here runs one yet. Overdue is
+// computed at read time instead (GET /v1/invoices?overdue=true compares
+// due_date against today) — see apps/api/src/modules/finance/routes.ts.
+
+export const billingCycleEnum = pgEnum("billing_cycle", ["monthly", "quarterly", "annual", "one_time"]);
+
+export const feeHeads = pgTable("fee_heads", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const feeStructures = pgTable("fee_structures", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  classId: uuid("class_id").notNull().references(() => classes.id),
+  academicSessionId: uuid("academic_session_id").notNull().references(() => academicSessions.id),
+  feeHeadId: uuid("fee_head_id").notNull().references(() => feeHeads.id),
+  amount: integer("amount").notNull(),
+  billingCycle: billingCycleEnum("billing_cycle").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const discountTypeEnum = pgEnum("discount_type", ["sibling", "scholarship", "staff_child", "other"]);
+export const discountKindEnum = pgEnum("discount_kind", ["flat", "percent"]);
+
+// Applied automatically on every future invoice generation run for this
+// student (Phase 3 C1's own AC: "without re-entry each cycle") — there is
+// no per-invoice discount entry step, generation itself reads this table.
+export const studentDiscounts = pgTable("student_discounts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  studentId: uuid("student_id").notNull().references(() => students.id),
+  type: discountTypeEnum("type").notNull(),
+  kind: discountKindEnum("kind").notNull(),
+  amountOrPct: integer("amount_or_pct").notNull(),
+  reason: text("reason").notNull(),
+  approvedBy: uuid("approved_by").notNull().references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const invoiceStatusEnum = pgEnum("invoice_status", ["open", "partially_paid", "paid", "cancelled"]);
+
+// amount_paid is tracked directly on the row (Phase 5 §4.6's own note),
+// not derived only from summing payments, so a defaulter-list read is a
+// single table scan, not a join+aggregate over every school's payments.
+export const invoices = pgTable("invoices", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  studentId: uuid("student_id").notNull().references(() => students.id),
+  academicSessionId: uuid("academic_session_id").notNull().references(() => academicSessions.id),
+  billingPeriod: text("billing_period").notNull(),
+  totalAmount: integer("total_amount").notNull(),
+  amountPaid: integer("amount_paid").notNull().default(0),
+  status: invoiceStatusEnum("status").notNull().default("open"),
+  dueDate: date("due_date").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const invoiceLineItems = pgTable("invoice_line_items", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  invoiceId: uuid("invoice_id").notNull().references(() => invoices.id),
+  feeHeadId: uuid("fee_head_id").notNull().references(() => feeHeads.id),
+  amount: integer("amount").notNull(),
+  discountApplied: integer("discount_applied").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Milestone 7 only ever writes 'bank_transfer' rows (Phase 3 C3) — the
+// other methods are real enum values already so Milestone 8 (online
+// payments) adds a webhook handler, not a schema change.
+export const paymentMethodEnum = pgEnum("payment_method", ["jazzcash", "easypaisa", "bank_transfer", "card"]);
+export const paymentStatusEnum = pgEnum("payment_status", ["pending", "succeeded", "failed"]);
+
+export const payments = pgTable("payments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  invoiceId: uuid("invoice_id").notNull().references(() => invoices.id),
+  method: paymentMethodEnum("method").notNull(),
+  providerReference: text("provider_reference"),
+  amount: integer("amount").notNull(),
+  status: paymentStatusEnum("status").notNull().default("pending"),
+  // Nullable — null for automated online payments (Milestone 8), set to
+  // the staff member who confirmed a manual bank-transfer (Phase 3 C3's
+  // own auditability requirement: "who confirmed it, when").
+  recordedBy: uuid("recorded_by").references(() => users.id),
+  paidAt: timestamp("paid_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// pdf_ref stays null for now — no file storage is wired up yet (same
+// deferral as homework's attachment_ref, Phase 1 §11 lists S3-compatible
+// storage as unchosen). The receipt row and its number exist as soon as a
+// payment succeeds regardless — a PDF is a rendering of this row later,
+// not a prerequisite for the record existing.
+export const receipts = pgTable("receipts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  paymentId: uuid("payment_id").notNull().unique().references(() => payments.id),
+  receiptNumber: text("receipt_number").notNull().unique(),
+  pdfRef: text("pdf_ref"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});

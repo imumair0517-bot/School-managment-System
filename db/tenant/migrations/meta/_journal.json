@@ -43,6 +43,13 @@
       "when": 1785788797121,
       "tag": "0005_massive_stick",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785791267064,
+      "tag": "0006_lumpy_riptide",
+      "breakpoints": true
     }
   ]
 }

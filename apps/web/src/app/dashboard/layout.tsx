@@ -38,6 +38,10 @@ function Shell({ children }: { children: React.ReactNode }) {
     // are shown on Home instead.
     { href: "/dashboard/exams", label: "Exams", show: me.permissions.exams === "write" },
     { href: "/dashboard/report-cards", label: "Report Cards", show: me.permissions.exams === "write" },
+    // Same pattern once more — generating invoices and recording payments
+    // is a staff (write) page; a parent's own invoices/balance are shown
+    // on Home instead.
+    { href: "/dashboard/finance", label: "Finance", show: me.permissions.finance === "write" },
     { href: "/dashboard/timetable", label: "Timetable", show: me.permissions.academic !== "none" },
     { href: "/dashboard/academic", label: "Academic Setup", show: me.permissions.academic === "write" },
     { href: "/dashboard/team", label: "Team", show: me.permissions.users !== "none" },

@@ -38,6 +38,32 @@ export async function canViewStudentAttendance(
   return false;
 }
 
+// Same shape again for invoices (Milestone 7) — but parent-only, not
+// student, since paying a fee is a guardian responsibility (finance stays
+// "none" for the student role by design — see packages/permissions's own
+// note) and there is nothing for a student to self-scope into here.
+export async function canViewStudentInvoices(
+  tenantId: string,
+  authUser: { sub: string; role: string },
+  override: PermissionOverride | null | undefined,
+  studentId: string,
+): Promise<boolean> {
+  const role = authUser.role as UserRole;
+
+  if (hasPermission(role, override, "finance", "read") && role !== "parent") {
+    return true;
+  }
+
+  if (role !== "parent") return false;
+
+  const db = await getTenantDbConnection(tenantId);
+  const guardianRows = await db.select().from(guardians).where(eq(guardians.userId, authUser.sub));
+  const guardian = guardianRows[0];
+  if (!guardian) return false;
+  const links = await db.select().from(studentGuardians).where(eq(studentGuardians.studentId, studentId));
+  return links.some((l) => l.guardianId === guardian.id);
+}
+
 // Same "own record only" rule as canViewStudentAttendance, applied to
 // report cards (Phase 7 §5.4-equivalent for Flow 4): staff with exams:read
 // can see any student's report card, a parent/student only their own —

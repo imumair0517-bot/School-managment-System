@@ -164,4 +164,29 @@ export const api = {
   publishReportCards: (examId: string, sectionId: string) =>
     apiFetch(`/v1/exams/${examId}/report-cards/publish`, { method: "POST", body: JSON.stringify({ sectionId }) }),
   getMyReportCards: () => apiFetch("/v1/report-cards/mine"),
+
+  // Finance (Milestone 7, Phase 5 §4.6, Phase 3 C1/C3/C4)
+  listFeeHeads: () => apiFetch("/v1/fee-heads"),
+  createFeeHead: (input: { name: string }) => apiFetch("/v1/fee-heads", { method: "POST", body: JSON.stringify(input) }),
+  listFeeStructures: (params?: { classId?: string; academicSessionId?: string }) => {
+    const qs = new URLSearchParams(params as Record<string, string>).toString();
+    return apiFetch(`/v1/fee-structures${qs ? `?${qs}` : ""}`);
+  },
+  createFeeStructure: (input: { classId: string; academicSessionId: string; feeHeadId: string; amount: number; billingCycle: string }) =>
+    apiFetch("/v1/fee-structures", { method: "POST", body: JSON.stringify(input) }),
+  listStudentDiscounts: (studentId: string) => apiFetch(`/v1/students/${studentId}/discounts`),
+  createStudentDiscount: (studentId: string, input: { type: string; kind: string; amountOrPct: number; reason: string }) =>
+    apiFetch(`/v1/students/${studentId}/discounts`, { method: "POST", body: JSON.stringify(input) }),
+  generateInvoices: (input: { academicSessionId: string; billingPeriod: string; dueDate: string }) =>
+    apiFetch("/v1/invoices/generate", { method: "POST", body: JSON.stringify(input) }),
+  listInvoices: (params?: { academicSessionId?: string; classId?: string; status?: string; overdue?: boolean }) => {
+    const qs = new URLSearchParams(
+      Object.fromEntries(Object.entries(params ?? {}).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])),
+    ).toString();
+    return apiFetch(`/v1/invoices${qs ? `?${qs}` : ""}`);
+  },
+  getInvoice: (invoiceId: string) => apiFetch(`/v1/invoices/${invoiceId}`),
+  recordPayment: (invoiceId: string, input: { amount: number; providerReference: string; paidAt?: string }) =>
+    apiFetch(`/v1/invoices/${invoiceId}/record-payment`, { method: "POST", body: JSON.stringify(input) }),
+  getMyInvoices: () => apiFetch("/v1/invoices/mine"),
 };

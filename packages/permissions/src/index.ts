@@ -29,7 +29,22 @@ export type UserRole =
 // module (teacher excluded even with exams:write) — see the inline check
 // in apps/api/src/modules/report-cards/routes.ts, since Flow 4 names
 // Principal/Admin specifically as the ones who publish.
-export type PermissionModule = "users" | "settings" | "admissions" | "academic" | "attendance" | "homework" | "exams";
+// Milestone 7 adds "finance" — covers invoice generation, defaulter
+// lookups, and manual payment recording (Phase 3 C1/C3/C4), all of which
+// Admin Staff does day to day (Phase 7 API design's own "[AS+]" tags).
+// Fee-structure and discount policy setup is further restricted beyond
+// this module (Admin Staff excluded even with finance:write) — see the
+// inline check in apps/api/src/modules/finance/routes.ts, since Phase 7
+// tags those specifically "[SO/PR]".
+export type PermissionModule =
+  | "users"
+  | "settings"
+  | "admissions"
+  | "academic"
+  | "attendance"
+  | "homework"
+  | "exams"
+  | "finance";
 
 export type PermissionLevel = "none" | "read" | "write";
 
@@ -45,27 +60,33 @@ export function meetsLevel(have: PermissionLevel, need: PermissionLevel): boolea
 // via a per-user override (user_permission_overrides, Phase 5 §3.2) —
 // never by changing these shared defaults.
 export const ROLE_DEFAULTS: Record<UserRole, Record<PermissionModule, PermissionLevel>> = {
-  school_owner: { users: "write", settings: "write", admissions: "write", academic: "write", attendance: "write", homework: "write", exams: "write" },
-  principal: { users: "write", settings: "write", admissions: "write", academic: "write", attendance: "write", homework: "write", exams: "write" },
+  school_owner: { users: "write", settings: "write", admissions: "write", academic: "write", attendance: "write", homework: "write", exams: "write", finance: "write" },
+  principal: { users: "write", settings: "write", admissions: "write", academic: "write", attendance: "write", homework: "write", exams: "write", finance: "write" },
   // Admin Staff runs admissions day-to-day by default (Phase 2 §B1) and
   // needs to see/manage the structure students enroll into — but not
   // staff accounts or branding (Phase 3 A4's own example). Can also mark/
   // correct attendance (e.g. covering for an absent teacher), and can see
   // (not assign) homework for front-desk parent questions. Read-only on
   // exams — front office can look up a result if asked, doesn't enter marks.
-  admin_staff: { users: "none", settings: "none", admissions: "write", academic: "write", attendance: "write", homework: "read", exams: "read" },
-  hr: { users: "read", settings: "none", admissions: "none", academic: "none", attendance: "none", homework: "none", exams: "none" },
+  // Finance is write (generates invoices, records bank-transfer payments,
+  // per Phase 3 C1/C3) but fee-structure/discount policy is narrowed
+  // further beyond this table — see the module's own inline check.
+  admin_staff: { users: "none", settings: "none", admissions: "write", academic: "write", attendance: "write", homework: "read", exams: "read", finance: "write" },
+  hr: { users: "read", settings: "none", admissions: "none", academic: "none", attendance: "none", homework: "none", exams: "none", finance: "none" },
   // Teachers can look up students/classes (their own roster, later
   // scoped further) but don't run admissions or edit school structure —
   // they *do* mark attendance, assign homework, and enter exam marks,
   // which is exactly why those are separate modules from "academic".
-  teacher: { users: "none", settings: "none", admissions: "none", academic: "read", attendance: "write", homework: "write", exams: "write" },
+  teacher: { users: "none", settings: "none", admissions: "none", academic: "read", attendance: "write", homework: "write", exams: "write", finance: "none" },
   // A guardian reads their own children's attendance/homework/results
   // (self-scoped at the API layer, not by this table — see
   // apps/api/src/db/*-access.ts) — this default just says "parents can
   // see this kind of thing at all," not "parents can see everyone's."
-  parent: { users: "none", settings: "none", admissions: "none", academic: "none", attendance: "read", homework: "read", exams: "read" },
-  student: { users: "none", settings: "none", admissions: "none", academic: "none", attendance: "read", homework: "read", exams: "read" },
+  // Paying a fee is a guardian responsibility, not the student's, so
+  // finance stays read for parents and none for students (unlike
+  // attendance/homework/exams, which both see).
+  parent: { users: "none", settings: "none", admissions: "none", academic: "none", attendance: "read", homework: "read", exams: "read", finance: "read" },
+  student: { users: "none", settings: "none", admissions: "none", academic: "none", attendance: "read", homework: "read", exams: "read", finance: "none" },
 };
 
 export type PermissionOverride = Partial<Record<PermissionModule, PermissionLevel>>;

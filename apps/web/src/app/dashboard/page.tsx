@@ -9,6 +9,16 @@ type Child = { id: string; fullName: string; sectionName: string | null };
 type AttendanceRecord = { date: string; status: string };
 type HomeworkItem = { id: string; subjectName: string | null; description: string; dueDate: string };
 type ReportCardItem = { id: string; studentName: string | null; examName: string | null; percentage: number; division: string };
+type InvoiceItem = {
+  id: string;
+  studentName: string | null;
+  billingPeriod: string;
+  totalAmount: number;
+  amountPaid: number;
+  status: string;
+  dueDate: string;
+  overdue: boolean;
+};
 
 const STATUS_STYLE: Record<string, string> = {
   present: "bg-success-soft text-success",
@@ -44,9 +54,10 @@ export default function DashboardPage() {
       </p>
 
       <div className="mt-8 rounded border border-dashed border-border p-8 text-center text-ink-muted">
-        Nothing here yet on Home — fees get built in the milestones that
-        follow (Phase 13). Admissions, Students, Attendance, Timetable,
-        Homework, and Exams/Report Cards are live now — see the menu above.
+        Nothing here yet on Home — communication and Voice AI get built in
+        the milestones that follow (Phase 13). Admissions, Students,
+        Attendance, Timetable, Homework, Exams/Report Cards, and Finance
+        are live now — see the menu above.
       </div>
     </div>
   );
@@ -68,12 +79,59 @@ function ParentHome() {
   return (
     <div className="flex flex-col gap-8">
       <h2 className="text-lg font-semibold text-ink">My Children</h2>
+      <InvoicesList />
       <ReportCardsList />
       <HomeworkList />
       {children.map((child) => (
         <AttendanceHistory key={child.id} title={`${child.fullName} — ${child.sectionName ?? "no section"}`} studentId={child.id} />
       ))}
     </div>
+  );
+}
+
+const INVOICE_STATUS_STYLE: Record<string, string> = {
+  open: "bg-info-soft text-info",
+  partially_paid: "bg-warning-soft text-warning",
+  paid: "bg-success-soft text-success",
+  cancelled: "bg-bg text-ink-muted",
+};
+
+// Milestone 7's own exit criteria doesn't require online payment (that's
+// Milestone 8) — this is just the balance-visibility half: a parent can
+// see what's owed and what's been paid without visiting the office.
+function InvoicesList() {
+  const [items, setItems] = useState<InvoiceItem[] | null>(null);
+
+  useEffect(() => {
+    api.getMyInvoices().then((res) => setItems(res.invoices));
+  }, []);
+
+  if (!items) return null;
+
+  return (
+    <section>
+      <h3 className="text-sm font-semibold text-ink">Fees</h3>
+      {items.length === 0 ? (
+        <p className="mt-2 text-sm text-ink-muted">No invoices yet.</p>
+      ) : (
+        <ul className="mt-2 flex flex-col gap-2">
+          {items.map((inv) => (
+            <li key={inv.id} className="flex items-center justify-between rounded border border-border bg-surface p-3 text-sm">
+              <span className="font-medium text-ink">
+                {inv.studentName} — {inv.billingPeriod}
+              </span>
+              <span className="flex items-center gap-2 text-ink-muted">
+                Rs. {inv.amountPaid} / {inv.totalAmount}
+                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${INVOICE_STATUS_STYLE[inv.status] ?? ""}`}>
+                  {inv.status.replace("_", " ")}
+                </span>
+                {inv.overdue && <span className="rounded-full bg-critical-soft px-2 py-0.5 text-xs font-medium text-critical">overdue</span>}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
