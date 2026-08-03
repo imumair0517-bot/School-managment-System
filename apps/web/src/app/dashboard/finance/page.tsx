@@ -20,6 +20,9 @@ type InvoiceSummary = {
   dueDate: string;
   overdue: boolean;
 };
+type Tag = { id: string; name: string };
+type StudentTag = { tagId: string; name: string | null; appliedBy: string | null; appliedAt: string };
+type ReminderResult = { sent: number; failed: number; simulated: boolean; skipped: { studentName: string; reason: string }[] };
 
 const BILLING_CYCLES = ["monthly", "quarterly", "annual", "one_time"];
 const DISCOUNT_TYPES = ["sibling", "scholarship", "staff_child", "other"];
@@ -49,6 +52,12 @@ export default function FinancePage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [overdueOnly, setOverdueOnly] = useState(false);
 
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [tagName, setTagName] = useState("");
+  const [excludeTagId, setExcludeTagId] = useState("");
+  const [sendingReminders, setSendingReminders] = useState(false);
+  const [reminderResult, setReminderResult] = useState<ReminderResult | null>(null);
+
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -58,6 +67,7 @@ export default function FinancePage() {
     api.listFeeHeads().then((res) => setFeeHeads(res.feeHeads));
     api.listFeeStructures().then((res) => setFeeStructures(res.feeStructures));
     api.listStudents().then((res) => setStudents(res.students));
+    api.listTags().then((res) => setTags(res.tags));
   }
   useEffect(refreshSetup, []);
 
@@ -110,6 +120,32 @@ export default function FinancePage() {
       setDiscountForm({ studentId: "", type: "sibling", kind: "flat", amountOrPct: "", reason: "" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not apply discount");
+    }
+  }
+
+  async function submitTag(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    try {
+      await api.createTag({ name: tagName });
+      setTagName("");
+      refreshSetup();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not create tag");
+    }
+  }
+
+  async function handleSendReminders() {
+    setError(null);
+    setReminderResult(null);
+    setSendingReminders(true);
+    try {
+      const res = await api.sendFeeReminders(excludeTagId || undefined);
+      setReminderResult(res);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not send reminders");
+    } finally {
+      setSendingReminders(false);
     }
   }
 
@@ -321,6 +357,72 @@ export default function FinancePage() {
       )}
 
       <section className="mt-8">
+        <h3 className="text-sm font-semibold text-ink">Tags</h3>
+        <p className="mt-1 text-sm text-ink-muted">
+          General-purpose tags — apply one to a student from an invoice row below. Fee reminders skip anyone carrying whichever tag you choose to exclude by.
+        </p>
+        <form onSubmit={submitTag} className="mt-2 flex items-end gap-3">
+          <input
+            value={tagName}
+            onChange={(e) => setTagName(e.target.value)}
+            placeholder="e.g. Fee Cleared"
+            className="rounded border border-border bg-bg px-3 py-2 text-sm text-ink outline-none focus:border-accent"
+          />
+          <button type="submit" disabled={!tagName.trim()} className="rounded bg-accent px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
+            Add tag
+          </button>
+        </form>
+        <ul className="mt-2 flex flex-wrap gap-2">
+          {tags.map((t) => (
+            <li key={t.id} className="rounded-full bg-surface px-3 py-1 text-xs text-ink-muted">
+              {t.name}
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="mt-8">
+        <h3 className="text-sm font-semibold text-ink">Send Fee Reminders</h3>
+        <p className="mt-1 text-sm text-ink-muted">
+          WhatsApps every family with an overdue balance right now — nothing runs on a schedule. Anyone carrying the excluded tag is skipped.
+        </p>
+        <div className="mt-2 flex flex-wrap items-end gap-3">
+          <label className="flex flex-col gap-1 text-sm text-ink">
+            Exclude students tagged
+            <select
+              value={excludeTagId}
+              onChange={(e) => setExcludeTagId(e.target.value)}
+              className="rounded border border-border bg-bg px-3 py-2 text-ink outline-none focus:border-accent"
+            >
+              <option value="">No exclusion</option>
+              {tags.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            onClick={handleSendReminders}
+            disabled={sendingReminders}
+            className="rounded bg-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+          >
+            {sendingReminders ? "Sending…" : "Send reminders"}
+          </button>
+        </div>
+        {reminderResult && (
+          <p className="mt-2 text-sm text-success">
+            Sent {reminderResult.sent}, failed {reminderResult.failed}
+            {reminderResult.simulated ? " (simulated — no WhatsApp provider configured yet, logged only)" : ""}.
+            {reminderResult.skipped.length > 0 &&
+              ` Skipped ${reminderResult.skipped.length}: ${reminderResult.skipped
+                .map((s) => `${s.studentName} (${s.reason.replace(/_/g, " ")})`)
+                .join(", ")}.`}
+          </p>
+        )}
+      </section>
+
+      <section className="mt-8">
         <h3 className="text-sm font-semibold text-ink">Generate Invoices</h3>
         <form onSubmit={submitGenerate} className="mt-2 flex flex-wrap items-end gap-3 rounded border border-border bg-surface p-4">
           <label className="flex flex-col gap-1 text-sm text-ink">
@@ -400,7 +502,7 @@ export default function FinancePage() {
 
         <ul className="mt-4 flex flex-col gap-3">
           {invoices.map((inv) => (
-            <InvoiceRow key={inv.id} summary={inv} onChanged={refreshInvoices} />
+            <InvoiceRow key={inv.id} summary={inv} allTags={tags} onChanged={refreshInvoices} />
           ))}
         </ul>
         {invoices.length === 0 && <p className="mt-4 text-sm text-ink-muted">No invoices match this filter.</p>}
@@ -425,19 +527,44 @@ type InvoiceDetail = {
   payments: { method: string; amount: number; providerReference: string | null; status: string; paidAt: string | null }[];
 };
 
-function InvoiceRow({ summary, onChanged }: { summary: InvoiceSummary; onChanged: () => void }) {
+function InvoiceRow({ summary, allTags, onChanged }: { summary: InvoiceSummary; allTags: Tag[]; onChanged: () => void }) {
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<InvoiceDetail | null>(null);
   const [recording, setRecording] = useState(false);
   const [payForm, setPayForm] = useState({ amount: "", providerReference: "" });
+  const [studentTags, setStudentTags] = useState<StudentTag[]>([]);
+  const [addTagId, setAddTagId] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   function load() {
     api.getInvoice(summary.id).then((res) => setDetail(res.invoice));
+    api.listStudentTags(summary.studentId).then((res) => setStudentTags(res.tags));
   }
   useEffect(() => {
     if (open) load();
   }, [open]);
+
+  async function handleAddTag() {
+    if (!addTagId) return;
+    setError(null);
+    try {
+      await api.applyStudentTag(summary.studentId, addTagId);
+      setAddTagId("");
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not apply tag");
+    }
+  }
+
+  async function handleRemoveTag(tagId: string) {
+    setError(null);
+    try {
+      await api.removeStudentTag(summary.studentId, tagId);
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not remove tag");
+    }
+  }
 
   async function handleRecordPayment() {
     setError(null);
@@ -500,6 +627,40 @@ function InvoiceRow({ summary, onChanged }: { summary: InvoiceSummary; onChanged
               </ul>
             </div>
           )}
+
+          <div className="mt-4">
+            <h5 className="text-sm font-semibold text-ink">Tags on this student</h5>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              {studentTags.map((t) => (
+                <span key={t.tagId} className="flex items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-xs text-accent">
+                  {t.name}
+                  <button onClick={() => handleRemoveTag(t.tagId)} className="text-accent hover:text-critical" aria-label={`Remove ${t.name}`}>
+                    ×
+                  </button>
+                </span>
+              ))}
+              {studentTags.length === 0 && <span className="text-sm text-ink-muted">No tags applied.</span>}
+            </div>
+            <div className="mt-2 flex items-end gap-2">
+              <select
+                value={addTagId}
+                onChange={(e) => setAddTagId(e.target.value)}
+                className="rounded border border-border bg-bg px-3 py-1.5 text-sm text-ink outline-none focus:border-accent"
+              >
+                <option value="">Choose a tag…</option>
+                {allTags
+                  .filter((t) => !studentTags.some((st) => st.tagId === t.id))
+                  .map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+              </select>
+              <button onClick={handleAddTag} disabled={!addTagId} className="rounded border border-border px-3 py-1.5 text-sm text-ink hover:bg-bg disabled:opacity-60">
+                Apply tag
+              </button>
+            </div>
+          </div>
 
           {remaining > 0 && summary.status !== "cancelled" && (
             <div className="mt-4">

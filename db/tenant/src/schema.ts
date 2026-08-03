@@ -420,9 +420,11 @@ export const payments = pgTable("payments", {
   providerReference: text("provider_reference"),
   amount: integer("amount").notNull(),
   status: paymentStatusEnum("status").notNull().default("pending"),
-  // Nullable — null for automated online payments (Milestone 8), set to
-  // the staff member who confirmed a manual bank-transfer (Phase 3 C3's
-  // own auditability requirement: "who confirmed it, when").
+  // Nullable — null for a future automated online payment gateway
+  // (JazzCash/EasyPaisa, deferred past Milestone 8 per a later scope
+  // decision — see the Milestone 8 comment below), set to the staff
+  // member who confirmed a manual bank-transfer (Phase 3 C3's own
+  // auditability requirement: "who confirmed it, when").
   recordedBy: uuid("recorded_by").references(() => users.id),
   paidAt: timestamp("paid_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -438,5 +440,61 @@ export const receipts = pgTable("receipts", {
   paymentId: uuid("payment_id").notNull().unique().references(() => payments.id),
   receiptNumber: text("receipt_number").notNull().unique(),
   pdfRef: text("pdf_ref"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// --- Milestone 8: Tags & Fee Reminder Messaging ---
+//
+// Re-scoped from the roadmap's original "Online Payments" (JazzCash/
+// EasyPaisa) at the user's explicit request — that gateway work is
+// deferred; this milestone instead builds a GoHighLevel-style tag system
+// (any tag, applied/removed manually, entity-scoped rather than
+// fee-specific — a real general-purpose primitive, not a single
+// "paid" boolean) and its first concrete use: a manual "send fee
+// reminders" action that WhatsApp-messages every family with an overdue
+// invoice except whichever tag the caller chooses to exclude by. There is
+// no scheduler/cron in this codebase yet (every "automatic" generation
+// step so far — report cards, invoices — is a button click that computes
+// the automatic part correctly), so this follows the same shape rather
+// than introducing new background-job infrastructure.
+
+export const tags = pgTable("tags", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull().unique(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Students are the first entity type tags attach to (the concrete need
+// this milestone solves is family/billing status) — the join table is
+// entity-scoped on purpose, so a later "tag a guardian" or "tag an
+// inquiry" is a new join table, not a rewrite of this one or of `tags`.
+export const studentTags = pgTable("student_tags", {
+  studentId: uuid("student_id").notNull().references(() => students.id),
+  tagId: uuid("tag_id").notNull().references(() => tags.id),
+  appliedBy: uuid("applied_by").notNull().references(() => users.id),
+  appliedAt: timestamp("applied_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const notificationTypeEnum = pgEnum("notification_type", ["fee_reminder", "absence_alert", "announcement"]);
+export const notificationChannelEnum = pgEnum("notification_channel", ["whatsapp", "sms"]);
+export const notificationStatusEnum = pgEnum("notification_status", ["queued", "sent", "delivered", "failed"]);
+
+// Phase 5 §4.7's own "Notification Engine" log table, built now instead
+// of waiting for the full Communication module (Milestone 9) because fee
+// reminders need exactly this one channel today. `body` stores the
+// composed message verbatim rather than a template reference — there's no
+// notification_templates table yet, deferred until Communication needs
+// tenant-branded templates for more than this one message type.
+export const notifications = pgTable("notifications", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  recipientGuardianId: uuid("recipient_guardian_id").notNull().references(() => guardians.id),
+  type: notificationTypeEnum("type").notNull(),
+  channel: notificationChannelEnum("channel").notNull(),
+  relatedEntityType: text("related_entity_type").notNull(),
+  relatedEntityId: uuid("related_entity_id").notNull(),
+  status: notificationStatusEnum("status").notNull().default("queued"),
+  body: text("body").notNull(),
+  errorMessage: text("error_message"),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

@@ -14,6 +14,10 @@ import {
   guardians,
   studentGuardians,
   userPermissionOverrides,
+  studentTags,
+  tags,
+  notifications,
+  users,
 } from "@school-os/db-tenant";
 import {
   createFeeHeadSchema,
@@ -21,6 +25,7 @@ import {
   createDiscountSchema,
   generateInvoicesSchema,
   recordPaymentSchema,
+  sendFeeRemindersSchema,
 } from "@school-os/validation";
 import { getTenantDbConnection } from "../../db/tenant-registry.js";
 import { tenantResolutionMiddleware } from "../../middleware/tenant-resolution.js";
@@ -28,6 +33,7 @@ import { requireAuth } from "../../middleware/auth.js";
 import { requirePermission } from "../../middleware/permissions.js";
 import { canViewStudentInvoices } from "../../db/student-access.js";
 import { logAuditEvent } from "../../db/audit.js";
+import { sendWhatsAppMessage } from "../../services/messaging/whatsappSender.js";
 
 const POLICY_ROLES = new Set(["school_owner", "principal"]);
 
@@ -483,6 +489,159 @@ export async function financeRoutes(app: FastifyInstance) {
         dueDate: inv.dueDate,
         overdue: inv.status !== "paid" && inv.status !== "cancelled" && inv.dueDate < today,
       })),
+    });
+  });
+
+  // The concrete first use of Milestone 8's tag system: message every
+  // family with an overdue balance, except whichever tag the caller
+  // chooses to exclude by (applied manually — see the tags module). No
+  // scheduler runs this on its own; a staff member decides when a batch
+  // goes out, same shape as invoice/report-card generation elsewhere.
+  app.post(
+    "/v1/invoices/send-reminders",
+    { preHandler: [...auth, requirePermission("finance", "write")] },
+    async (req, reply) => {
+      const parsed = sendFeeRemindersSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return reply.code(400).send({ error: { code: "invalid_input", message: parsed.error.issues[0]?.message ?? "Invalid input" } });
+      }
+      const tenant = req.tenant!;
+      const db = await getTenantDbConnection(tenant.id);
+      const today = new Date().toISOString().slice(0, 10);
+
+      const allInvoices = await db.select().from(invoices);
+      const overdue = allInvoices.filter((inv) => inv.status !== "paid" && inv.status !== "cancelled" && inv.dueDate < today);
+      if (overdue.length === 0) {
+        return reply.send({ sent: 0, failed: 0, skipped: [], simulated: false });
+      }
+
+      const owedByStudent = new Map<string, { balance: number; earliestDueDate: string }>();
+      for (const inv of overdue) {
+        const balance = inv.totalAmount - inv.amountPaid;
+        const current = owedByStudent.get(inv.studentId);
+        if (!current) {
+          owedByStudent.set(inv.studentId, { balance, earliestDueDate: inv.dueDate });
+        } else {
+          current.balance += balance;
+          if (inv.dueDate < current.earliestDueDate) current.earliestDueDate = inv.dueDate;
+        }
+      }
+
+      const studentIds = [...owedByStudent.keys()];
+      const excludedStudentIds = new Set<string>();
+      if (parsed.data.excludeTagId) {
+        const tagRows = await db
+          .select()
+          .from(studentTags)
+          .where(and(inArray(studentTags.studentId, studentIds), eq(studentTags.tagId, parsed.data.excludeTagId)));
+        for (const r of tagRows) excludedStudentIds.add(r.studentId);
+      }
+
+      const eligibleStudentIds = studentIds.filter((id) => !excludedStudentIds.has(id));
+
+      const skipped: { studentId: string; studentName: string; reason: string }[] = [];
+      if (excludedStudentIds.size > 0) {
+        const excludedStudentRows = await db.select().from(students).where(inArray(students.id, [...excludedStudentIds]));
+        for (const s of excludedStudentRows) skipped.push({ studentId: s.id, studentName: s.fullName, reason: "excluded_by_tag" });
+      }
+
+      if (eligibleStudentIds.length === 0) {
+        return reply.send({ sent: 0, failed: 0, skipped, simulated: false });
+      }
+
+      const [studentRows, allLinks, allGuardians, allUsers] = await Promise.all([
+        db.select().from(students).where(inArray(students.id, eligibleStudentIds)),
+        db.select().from(studentGuardians).where(inArray(studentGuardians.studentId, eligibleStudentIds)),
+        db.select().from(guardians),
+        db.select().from(users),
+      ]);
+      const studentById = new Map(studentRows.map((s) => [s.id, s]));
+      const guardianById = new Map(allGuardians.map((g) => [g.id, g]));
+      const userById = new Map(allUsers.map((u) => [u.id, u]));
+
+      let sent = 0;
+      let failed = 0;
+      let anySimulated = false;
+
+      for (const studentId of eligibleStudentIds) {
+        const student = studentById.get(studentId)!;
+        const links = allLinks.filter((l) => l.studentId === studentId);
+        const primaryLink = links.find((l) => l.isPrimaryBillingContact) ?? links[0];
+        const guardian = primaryLink ? guardianById.get(primaryLink.guardianId) : undefined;
+        const guardianUser = guardian ? userById.get(guardian.userId) : undefined;
+
+        if (!guardian || !guardianUser?.phone) {
+          skipped.push({ studentId, studentName: student.fullName, reason: "no_guardian_phone" });
+          continue;
+        }
+
+        const owed = owedByStudent.get(studentId)!;
+        const body =
+          `Dear ${guardianUser.fullName}, this is a reminder from ${tenant.name} that ${student.fullName}'s ` +
+          `outstanding school fee of Rs. ${owed.balance} was due on ${owed.earliestDueDate} and remains unpaid. ` +
+          `Kindly arrange payment at your earliest convenience.`;
+
+        const result = await sendWhatsAppMessage(guardianUser.phone, body);
+        if (result.simulated) anySimulated = true;
+
+        await db.insert(notifications).values({
+          recipientGuardianId: guardian.id,
+          type: "fee_reminder",
+          channel: "whatsapp",
+          relatedEntityType: "student",
+          relatedEntityId: studentId,
+          status: result.status,
+          body,
+          errorMessage: result.status === "failed" ? result.error : null,
+          sentAt: result.status === "sent" ? new Date() : null,
+        });
+
+        if (result.status === "sent") sent++;
+        else failed++;
+      }
+
+      await logAuditEvent(tenant.id, {
+        actorUserId: req.authUser!.sub,
+        action: "fee_reminders.sent",
+        entityType: "tenant",
+        entityId: tenant.id,
+        detail: { sent, failed, skipped: skipped.length, excludeTagId: parsed.data.excludeTagId ?? null },
+      });
+
+      return reply.send({ sent, failed, skipped, simulated: anySimulated });
+    },
+  );
+
+  app.get("/v1/notifications", { preHandler: [...auth, requirePermission("finance", "read")] }, async (req, reply) => {
+    const { type } = req.query as { type?: string };
+    const db = await getTenantDbConnection(req.tenant!.id);
+    const [rows, guardianRows, userRows] = await Promise.all([
+      db.select().from(notifications),
+      db.select().from(guardians),
+      db.select().from(users),
+    ]);
+    const guardianById = new Map(guardianRows.map((g) => [g.id, g]));
+    const userById = new Map(userRows.map((u) => [u.id, u]));
+    const filtered = type ? rows.filter((n) => n.type === type) : rows;
+
+    return reply.send({
+      notifications: filtered
+        .sort((a, b) => (b.createdAt > a.createdAt ? 1 : -1))
+        .map((n) => {
+          const guardian = guardianById.get(n.recipientGuardianId);
+          const guardianUser = guardian ? userById.get(guardian.userId) : undefined;
+          return {
+            id: n.id,
+            recipientName: guardianUser?.fullName ?? null,
+            type: n.type,
+            channel: n.channel,
+            status: n.status,
+            body: n.body,
+            errorMessage: n.errorMessage,
+            sentAt: n.sentAt,
+            createdAt: n.createdAt,
+          };
+        }),
     });
   });
 }

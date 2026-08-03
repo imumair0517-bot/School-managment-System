@@ -8,3 +8,4 @@ export * from "./homework.js";
 export * from "./exams.js";
 export * from "./report-cards.js";
 export * from "./finance.js";
+export * from "./tags.js";

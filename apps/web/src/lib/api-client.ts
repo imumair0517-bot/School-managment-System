@@ -189,4 +189,16 @@ export const api = {
   recordPayment: (invoiceId: string, input: { amount: number; providerReference: string; paidAt?: string }) =>
     apiFetch(`/v1/invoices/${invoiceId}/record-payment`, { method: "POST", body: JSON.stringify(input) }),
   getMyInvoices: () => apiFetch("/v1/invoices/mine"),
+
+  // Tags & fee reminders (Milestone 8 — general-purpose tags, GHL-style)
+  listTags: () => apiFetch("/v1/tags"),
+  createTag: (input: { name: string }) => apiFetch("/v1/tags", { method: "POST", body: JSON.stringify(input) }),
+  listStudentTags: (studentId: string) => apiFetch(`/v1/students/${studentId}/tags`),
+  applyStudentTag: (studentId: string, tagId: string) =>
+    apiFetch(`/v1/students/${studentId}/tags`, { method: "POST", body: JSON.stringify({ tagId }) }),
+  removeStudentTag: (studentId: string, tagId: string) =>
+    apiFetch(`/v1/students/${studentId}/tags/${tagId}`, { method: "DELETE" }),
+  sendFeeReminders: (excludeTagId?: string) =>
+    apiFetch("/v1/invoices/send-reminders", { method: "POST", body: JSON.stringify({ excludeTagId }) }),
+  listNotifications: (type?: string) => apiFetch(`/v1/notifications${type ? `?type=${type}` : ""}`),
 };
