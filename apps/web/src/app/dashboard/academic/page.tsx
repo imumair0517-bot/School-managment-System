@@ -6,26 +6,57 @@ import { api } from "@/lib/api-client";
 type Session = { id: string; name: string; startDate: string; endDate: string; isCurrent: boolean };
 type Class = { id: string; name: string };
 type Section = { id: string; name: string; capacity: number; enrolled: number; className: string | null; academicSessionId: string };
+type Subject = { id: string; name: string };
+type Slot = { id: string; name: string; startTime: string; endTime: string };
 
-// "Classes, Sections, Subjects" from Phase 13 M3 — Subjects is deferred to
-// Milestone 4 (nothing consumes it yet, see db/tenant/src/schema.ts).
-// A school configures its own structure here before admitting anyone.
+// "Classes, Sections, Subjects" from Phase 13 M3/M4. A school configures
+// its own structure here before admitting anyone or building a timetable.
 export default function AcademicSetupPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [slots, setSlots] = useState<Slot[]>([]);
 
   const [sessionForm, setSessionForm] = useState({ name: "", startDate: "", endDate: "" });
   const [classForm, setClassForm] = useState({ name: "" });
   const [sectionForm, setSectionForm] = useState({ classId: "", academicSessionId: "", name: "", capacity: "30" });
+  const [subjectForm, setSubjectForm] = useState({ name: "" });
+  const [slotForm, setSlotForm] = useState({ name: "", startTime: "", endTime: "" });
   const [error, setError] = useState<string | null>(null);
 
   function refresh() {
     api.listAcademicSessions().then((res) => setSessions(res.sessions));
     api.listClasses().then((res) => setClasses(res.classes));
     api.listSections().then((res) => setSections(res.sections));
+    api.listSubjects().then((res) => setSubjects(res.subjects));
+    api.listTimetableSlots().then((res) => setSlots(res.slots));
   }
   useEffect(refresh, []);
+
+  async function submitSubject(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    try {
+      await api.createSubject(subjectForm);
+      setSubjectForm({ name: "" });
+      refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not create subject");
+    }
+  }
+
+  async function submitSlot(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    try {
+      await api.createTimetableSlot(slotForm);
+      setSlotForm({ name: "", startTime: "", endTime: "" });
+      refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not create period");
+    }
+  }
 
   async function submitSession(e: React.FormEvent) {
     e.preventDefault();
@@ -213,6 +244,71 @@ export default function AcademicSetupPage() {
               value={sectionForm.capacity}
               onChange={(e) => setSectionForm((f) => ({ ...f, capacity: e.target.value }))}
               className="w-20 rounded border border-border bg-bg px-2 py-1.5 text-sm text-ink outline-none focus:border-accent"
+            />
+          </Field>
+          <button className="rounded bg-accent px-3 py-1.5 text-sm font-medium text-white">Add</button>
+        </form>
+      </section>
+
+      <section className="rounded border border-border bg-surface p-5">
+        <h3 className="text-sm font-semibold text-ink">Subjects</h3>
+        <ul className="mt-3 flex flex-col gap-1 text-sm text-ink-muted">
+          {subjects.map((s) => (
+            <li key={s.id}>{s.name}</li>
+          ))}
+          {subjects.length === 0 && <li>No subjects yet.</li>}
+        </ul>
+        <form onSubmit={submitSubject} className="mt-3 flex items-end gap-2">
+          <Field label="Name">
+            <input
+              required
+              value={subjectForm.name}
+              onChange={(e) => setSubjectForm({ name: e.target.value })}
+              placeholder="Mathematics"
+              className="w-40 rounded border border-border bg-bg px-2 py-1.5 text-sm text-ink outline-none focus:border-accent"
+            />
+          </Field>
+          <button className="rounded bg-accent px-3 py-1.5 text-sm font-medium text-white">Add</button>
+        </form>
+      </section>
+
+      <section className="rounded border border-border bg-surface p-5">
+        <h3 className="text-sm font-semibold text-ink">Periods</h3>
+        <p className="mt-1 text-xs text-ink-muted">The time slots the timetable is built from.</p>
+        <ul className="mt-3 flex flex-col gap-1 text-sm text-ink-muted">
+          {slots.map((s) => (
+            <li key={s.id}>
+              {s.name} <span className="text-ink-muted">({s.startTime}–{s.endTime})</span>
+            </li>
+          ))}
+          {slots.length === 0 && <li>No periods yet.</li>}
+        </ul>
+        <form onSubmit={submitSlot} className="mt-3 flex flex-wrap items-end gap-2">
+          <Field label="Name">
+            <input
+              required
+              value={slotForm.name}
+              onChange={(e) => setSlotForm((f) => ({ ...f, name: e.target.value }))}
+              placeholder="Period 1"
+              className="w-28 rounded border border-border bg-bg px-2 py-1.5 text-sm text-ink outline-none focus:border-accent"
+            />
+          </Field>
+          <Field label="Start">
+            <input
+              required
+              type="time"
+              value={slotForm.startTime}
+              onChange={(e) => setSlotForm((f) => ({ ...f, startTime: e.target.value }))}
+              className="rounded border border-border bg-bg px-2 py-1.5 text-sm text-ink outline-none focus:border-accent"
+            />
+          </Field>
+          <Field label="End">
+            <input
+              required
+              type="time"
+              value={slotForm.endTime}
+              onChange={(e) => setSlotForm((f) => ({ ...f, endTime: e.target.value }))}
+              className="rounded border border-border bg-bg px-2 py-1.5 text-sm text-ink outline-none focus:border-accent"
             />
           </Field>
           <button className="rounded bg-accent px-3 py-1.5 text-sm font-medium text-white">Add</button>

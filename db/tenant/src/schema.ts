@@ -6,13 +6,16 @@ import { pgTable, uuid, text, timestamp, pgEnum, jsonb, integer, boolean, date }
 // tenant database. No tenant_id column anywhere in here, on purpose —
 // isolation is physical (one database per tenant), per Phase 5 Principle 1.
 //
-// Milestone 3 adds people (students, guardians) and the structural
+// Milestone 3 added people (students, guardians) and the structural
 // container they enroll into (academic sessions, classes, sections).
-// Subjects/timetable (Phase 5 §4.1) are deferred to Milestone 4 — nothing
-// consumes a subject catalog until timetable/homework/exams exist, so it
-// stays out of the schema until one of those milestones actually needs it,
-// same discipline as the deferred tenant_settings/guardian-preference
-// columns noted elsewhere in this file.
+// Milestone 4 adds subjects/timetable and daily attendance. class_subjects
+// (which subjects a class formally offers, Phase 5 §4.1) stays deferred
+// until Exams (Milestone 6) needs that catalog — the timetable builder
+// here just picks a subject directly per entry, which is enough on its
+// own. leave_requests (Phase 5 §4.3) is deferred to Communication
+// (Milestone 9), the first module that would actually read it (to
+// suppress an absence alert) — same "don't add unused tables" discipline
+// as elsewhere in this file.
 
 export const userRoleEnum = pgEnum("user_role", [
   "school_owner",
@@ -179,4 +182,49 @@ export const studentGuardians = pgTable("student_guardians", {
   studentId: uuid("student_id").notNull().references(() => students.id),
   guardianId: uuid("guardian_id").notNull().references(() => guardians.id),
   isPrimaryBillingContact: boolean("is_primary_billing_contact").notNull().default(true),
+});
+
+// --- Milestone 4: Subjects & Timetable (Phase 5 §4.1) ---
+
+export const subjects = pgTable("subjects", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const timetableSlots = pgTable("timetable_slots", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// dayOfWeek: 1=Monday .. 5=Friday (school week — matches the target
+// market's working week; a 6-day-week school just also uses 6, schema
+// doesn't need to know the difference).
+export const timetableEntries = pgTable("timetable_entries", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  sectionId: uuid("section_id").notNull().references(() => sections.id),
+  subjectId: uuid("subject_id").notNull().references(() => subjects.id),
+  teacherId: uuid("teacher_id").notNull().references(() => users.id),
+  dayOfWeek: integer("day_of_week").notNull(),
+  slotId: uuid("slot_id").notNull().references(() => timetableSlots.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// --- Milestone 4: Attendance (Phase 5 §4.3) ---
+
+export const attendanceStatusEnum = pgEnum("attendance_status", ["present", "absent", "late", "leave"]);
+
+export const studentAttendance = pgTable("student_attendance", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  studentId: uuid("student_id").notNull().references(() => students.id),
+  sectionId: uuid("section_id").notNull().references(() => sections.id),
+  academicSessionId: uuid("academic_session_id").notNull().references(() => academicSessions.id),
+  date: date("date").notNull(),
+  status: attendanceStatusEnum("status").notNull(),
+  markedBy: uuid("marked_by").notNull().references(() => users.id),
+  markedAt: timestamp("marked_at", { withTimezone: true }).notNull().defaultNow(),
+  editedAt: timestamp("edited_at", { withTimezone: true }),
 });

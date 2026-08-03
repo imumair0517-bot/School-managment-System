@@ -242,8 +242,10 @@ export async function admissionsRoutes(app: FastifyInstance) {
     "/v1/students",
     { preHandler: [...auth, requirePermission("academic", "read")] },
     async (req, reply) => {
+      const { sectionId } = req.query as { sectionId?: string };
       const db = await getTenantDbConnection(req.tenant!.id);
-      const rows = await db.select().from(students);
+      const allRows = await db.select().from(students);
+      const rows = sectionId ? allRows.filter((s) => s.currentSectionId === sectionId) : allRows;
       const sectionRows = await db.select().from(sections);
       const sectionById = new Map(sectionRows.map((s) => [s.id, s]));
 

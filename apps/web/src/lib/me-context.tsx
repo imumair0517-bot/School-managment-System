@@ -10,6 +10,7 @@ export type Me = {
   user: { id: string; fullName: string; email: string; role: string };
   tenant: { id: string; name: string; subdomain: string };
   permissions: Record<string, PermissionLevel>;
+  studentId: string | null;
 };
 
 const MeContext = createContext<Me | null>(null);

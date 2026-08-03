@@ -105,6 +105,28 @@ export const api = {
   admitInquiry: (inquiryId: string, sectionId: string) =>
     apiFetch(`/v1/admissions/inquiries/${inquiryId}/admit`, { method: "POST", body: JSON.stringify({ sectionId }) }),
 
-  listStudents: () => apiFetch("/v1/students"),
+  listStudents: (params?: { sectionId?: string }) => {
+    const qs = params?.sectionId ? `?sectionId=${params.sectionId}` : "";
+    return apiFetch(`/v1/students${qs}`);
+  },
   getStudent: (studentId: string) => apiFetch(`/v1/students/${studentId}`),
+
+  // Subjects & Timetable (Milestone 4, Phase 2 §B4/B6)
+  listTeachers: () => apiFetch("/v1/teachers"),
+  listSubjects: () => apiFetch("/v1/subjects"),
+  createSubject: (input: { name: string }) => apiFetch("/v1/subjects", { method: "POST", body: JSON.stringify(input) }),
+  listTimetableSlots: () => apiFetch("/v1/timetable-slots"),
+  createTimetableSlot: (input: { name: string; startTime: string; endTime: string }) =>
+    apiFetch("/v1/timetable-slots", { method: "POST", body: JSON.stringify(input) }),
+  getTimetable: (sectionId: string) => apiFetch(`/v1/timetable?sectionId=${sectionId}`),
+  createTimetableEntry: (input: { sectionId: string; subjectId: string; teacherId: string; dayOfWeek: number; slotId: string }) =>
+    apiFetch("/v1/timetable", { method: "POST", body: JSON.stringify(input) }),
+
+  // Attendance (Milestone 4, Phase 3 B2, Flow 3)
+  getSectionAttendance: (sectionId: string, date: string) =>
+    apiFetch(`/v1/sections/${sectionId}/attendance?date=${date}`),
+  submitAttendance: (sectionId: string, date: string, entries: { studentId: string; status: string }[]) =>
+    apiFetch(`/v1/sections/${sectionId}/attendance`, { method: "POST", body: JSON.stringify({ date, entries }) }),
+  getStudentAttendance: (studentId: string) => apiFetch(`/v1/students/${studentId}/attendance`),
+  getMyChildren: () => apiFetch("/v1/me/children"),
 };

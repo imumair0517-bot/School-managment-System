@@ -26,6 +26,11 @@ function Shell({ children }: { children: React.ReactNode }) {
     { href: "/dashboard", label: "Home", show: true },
     { href: "/dashboard/admissions", label: "Admissions", show: me.permissions.admissions !== "none" },
     { href: "/dashboard/students", label: "Students", show: me.permissions.academic !== "none" },
+    // Marking attendance is a staff-only page (grid entry) — a parent/
+    // student's own attendance is shown on Home instead (Milestone 4
+    // exit criteria only requires that view, not a dedicated nav page).
+    { href: "/dashboard/attendance", label: "Attendance", show: me.permissions.attendance === "write" },
+    { href: "/dashboard/timetable", label: "Timetable", show: me.permissions.academic !== "none" },
     { href: "/dashboard/academic", label: "Academic Setup", show: me.permissions.academic === "write" },
     { href: "/dashboard/team", label: "Team", show: me.permissions.users !== "none" },
     { href: "/dashboard/settings", label: "Settings", show: me.permissions.settings !== "none" },
@@ -33,39 +38,39 @@ function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-bg">
-      <header className="flex items-center justify-between border-b border-border bg-surface px-6 py-4">
-        <div className="flex items-center gap-8">
-          <div>
-            <p className="text-sm text-ink-muted">School</p>
-            <h1 className="text-lg font-semibold text-ink">{me.tenant.name}</h1>
+      <header className="border-b border-border bg-surface">
+        <div className="flex items-center justify-between gap-4 px-6 py-3">
+          <h1 className="truncate text-base font-semibold text-ink">{me.tenant.name}</h1>
+          <div className="flex shrink-0 items-center gap-4">
+            <span className="hidden text-sm text-ink-muted sm:inline">
+              {me.user.fullName} · {me.user.role.replace("_", " ")}
+            </span>
+            <button
+              onClick={() => api.logout().then(() => router.replace("/login"))}
+              className="rounded border border-border px-3 py-1.5 text-sm text-ink hover:bg-bg"
+            >
+              Sign out
+            </button>
           </div>
-          <nav className="flex gap-1">
-            {navItems
-              .filter((item) => item.show)
-              .map((item) => (
-                <a
-                  key={item.href}
-                  href={item.href}
-                  className={`rounded px-3 py-1.5 text-sm ${
-                    pathname === item.href ? "bg-accent-soft text-accent" : "text-ink-muted hover:bg-bg"
-                  }`}
-                >
-                  {item.label}
-                </a>
-              ))}
-          </nav>
         </div>
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-ink-muted">
-            {me.user.fullName} · {me.user.role.replace("_", " ")}
-          </span>
-          <button
-            onClick={() => api.logout().then(() => router.replace("/login"))}
-            className="rounded border border-border px-3 py-1.5 text-sm text-ink hover:bg-bg"
-          >
-            Sign out
-          </button>
-        </div>
+        {/* Its own row, independently scrollable — so the number of visible
+            nav items (which varies a lot by role/permissions) never fights
+            the branding or account controls for space. */}
+        <nav className="flex gap-1 overflow-x-auto border-t border-border px-6 py-2">
+          {navItems
+            .filter((item) => item.show)
+            .map((item) => (
+              <a
+                key={item.href}
+                href={item.href}
+                className={`shrink-0 rounded px-3 py-1.5 text-sm ${
+                  pathname === item.href ? "bg-accent-soft text-accent" : "text-ink-muted hover:bg-bg"
+                }`}
+              >
+                {item.label}
+              </a>
+            ))}
+        </nav>
       </header>
 
       <div className="mx-auto max-w-5xl px-6 py-10">{children}</div>

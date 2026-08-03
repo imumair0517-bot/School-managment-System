@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { eq } from "drizzle-orm";
-import { users, userPermissionOverrides } from "@school-os/db-tenant";
+import { users, userPermissionOverrides, students } from "@school-os/db-tenant";
 import { loginSchema, createStaffSchema, updatePermissionsSchema } from "@school-os/validation";
 import { getEffectivePermissions, type UserRole } from "@school-os/permissions";
 import { getTenantDbConnection } from "../../db/tenant-registry.js";
@@ -96,10 +96,20 @@ export async function identityRoutes(app: FastifyInstance) {
         overrideRows[0]?.permissions as Record<string, "none" | "read" | "write"> | undefined,
       );
 
+      // A student's own record — lets the frontend go straight to
+      // GET /v1/students/{studentId}/attendance for "my own attendance"
+      // without a separate lookup endpoint.
+      let studentId: string | null = null;
+      if (user.primaryRole === "student") {
+        const studentRows = await db.select().from(students).where(eq(students.userId, user.id));
+        studentId = studentRows[0]?.id ?? null;
+      }
+
       return reply.send({
         user: { id: user.id, fullName: user.fullName, email: user.email, role: user.primaryRole },
         tenant: { id: tenant.id, name: tenant.name, subdomain: tenant.subdomain },
         permissions,
+        studentId,
       });
     },
   );

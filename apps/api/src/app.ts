@@ -6,6 +6,7 @@ import { platformRoutes } from "./modules/platform/routes.js";
 import { settingsRoutes } from "./modules/settings/routes.js";
 import { academicRoutes } from "./modules/academic/routes.js";
 import { admissionsRoutes } from "./modules/admissions/routes.js";
+import { attendanceRoutes } from "./modules/attendance/routes.js";
 
 export function buildApp() {
   const app = Fastify({ logger: true });
@@ -33,6 +34,7 @@ export function buildApp() {
   app.register(settingsRoutes);
   app.register(academicRoutes);
   app.register(admissionsRoutes);
+  app.register(attendanceRoutes);
 
   return app;
 }

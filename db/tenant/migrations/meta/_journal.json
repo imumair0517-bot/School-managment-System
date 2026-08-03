@@ -22,6 +22,13 @@
       "when": 1785710575154,
       "tag": "0002_old_the_leader",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1785785986242,
+      "tag": "0003_pretty_dark_beast",
+      "breakpoints": true
     }
   ]
 }
