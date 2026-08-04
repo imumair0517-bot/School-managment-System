@@ -23,3 +23,22 @@ export const createSectionSchema = z.object({
   classTeacherId: z.string().uuid().optional(),
 });
 export type CreateSectionInput = z.infer<typeof createSectionSchema>;
+
+// Milestone 11, Phase 3 B7 — "in one action," but with confirm required
+// explicitly in the payload (z.literal(true), not just a truthy check) as
+// a second, machine-checked guard behind the UI's own confirmation step,
+// since this is called out as a big, hard-to-undo action (Phase 4's
+// cross-flow note).
+export const promoteSectionSchema = z
+  .object({
+    fromSectionId: z.string().uuid(),
+    toSectionId: z.string().uuid(),
+    repeatingStudentIds: z.array(z.string().uuid()).optional(),
+    repeatSectionId: z.string().uuid().optional(),
+    confirm: z.literal(true),
+  })
+  .refine((data) => !data.repeatingStudentIds || data.repeatingStudentIds.length === 0 || Boolean(data.repeatSectionId), {
+    message: "repeatSectionId is required when holding any student back",
+    path: ["repeatSectionId"],
+  });
+export type PromoteSectionInput = z.infer<typeof promoteSectionSchema>;

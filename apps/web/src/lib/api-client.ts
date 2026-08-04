@@ -88,6 +88,8 @@ export const api = {
   },
   createSection: (input: { classId: string; academicSessionId: string; name: string; capacity: number; classTeacherId?: string }) =>
     apiFetch("/v1/sections", { method: "POST", body: JSON.stringify(input) }),
+  promoteSection: (input: { fromSectionId: string; toSectionId: string; repeatingStudentIds?: string[]; repeatSectionId?: string }) =>
+    apiFetch("/v1/promotion", { method: "POST", body: JSON.stringify({ ...input, confirm: true }) }),
 
   // Admissions (Milestone 3, Phase 7 §5.2, Flow 2)
   listInquiries: (stage?: string) => apiFetch(`/v1/admissions/inquiries${stage ? `?stage=${stage}` : ""}`),

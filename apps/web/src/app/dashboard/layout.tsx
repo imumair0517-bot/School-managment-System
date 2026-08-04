@@ -49,6 +49,15 @@ function Shell({ children }: { children: React.ReactNode }) {
     { href: "/dashboard/communication", label: "Communication", show: me.permissions.communication === "write" },
     { href: "/dashboard/timetable", label: "Timetable", show: me.permissions.academic !== "none" },
     { href: "/dashboard/academic", label: "Academic Setup", show: me.permissions.academic === "write" },
+    // Unlike every other "write" nav item above, Admin Staff can't use
+    // any part of this page (Phase 3 B7's actor is the Principal
+    // specifically) — hidden by role directly rather than by permission
+    // level, since academic:write alone would show it to Admin Staff too.
+    {
+      href: "/dashboard/promotion",
+      label: "Promotion",
+      show: me.user.role === "school_owner" || me.user.role === "principal",
+    },
     { href: "/dashboard/team", label: "Team", show: me.permissions.users !== "none" },
     { href: "/dashboard/settings", label: "Settings", show: me.permissions.settings !== "none" },
   ];

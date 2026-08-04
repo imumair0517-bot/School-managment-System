@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, inArray } from "drizzle-orm";
 import {
   academicSessions,
   classes,
@@ -17,6 +17,7 @@ import {
   createSubjectSchema,
   createTimetableSlotSchema,
   createTimetableEntrySchema,
+  promoteSectionSchema,
 } from "@school-os/validation";
 import { getTenantDbConnection } from "../../db/tenant-registry.js";
 import { tenantResolutionMiddleware } from "../../middleware/tenant-resolution.js";
@@ -295,4 +296,115 @@ export async function academicRoutes(app: FastifyInstance) {
       })),
     });
   });
+
+  // Milestone 11, Phase 3 B7 / Phase 4's Flow 2 continuation: bulk
+  // year-end promotion. Restricted to School Owner/Principal beyond the
+  // general academic:write tier — Admin Staff manages day-to-day
+  // structure but this is Phase 7 API design's own "[PR]" tag, and
+  // matches the same narrowing pattern as finance policy (Milestone 7)
+  // and report-card publish (Milestone 6). No new column moves for a
+  // promoted student besides current_section_id — every historical
+  // record (marks, attendance, invoices, report cards) already points at
+  // the old section/session id and stays there untouched, which is what
+  // "sections reset fresh every academic session" (Phase 5 §6) was
+  // designed to make safe.
+  app.post(
+    "/v1/promotion",
+    { preHandler: [...auth, requirePermission("academic", "write")] },
+    async (req, reply) => {
+      if (req.authUser!.role !== "school_owner" && req.authUser!.role !== "principal") {
+        return reply.code(403).send({ error: { code: "forbidden", message: "Only the School Owner or Principal can run promotion" } });
+      }
+      const parsed = promoteSectionSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ error: { code: "invalid_input", message: parsed.error.issues[0]?.message ?? "Invalid input" } });
+      }
+      const tenant = req.tenant!;
+      const db = await getTenantDbConnection(tenant.id);
+
+      const [fromSectionRows, toSectionRows] = await Promise.all([
+        db.select().from(sections).where(eq(sections.id, parsed.data.fromSectionId)),
+        db.select().from(sections).where(eq(sections.id, parsed.data.toSectionId)),
+      ]);
+      const fromSection = fromSectionRows[0];
+      const toSection = toSectionRows[0];
+      if (!fromSection || !toSection) {
+        return reply.code(404).send({ error: { code: "not_found", message: "No such section" } });
+      }
+      if (fromSection.id === toSection.id) {
+        return reply.code(400).send({ error: { code: "invalid_target", message: "Promote into a different section" } });
+      }
+      if (fromSection.academicSessionId === toSection.academicSessionId) {
+        return reply
+          .code(400)
+          .send({ error: { code: "invalid_target", message: "Promotion must move students into a different academic session" } });
+      }
+
+      const repeatingIds = new Set(parsed.data.repeatingStudentIds ?? []);
+      let repeatSection: typeof toSection | undefined;
+      if (repeatingIds.size > 0) {
+        const repeatSectionRows = await db.select().from(sections).where(eq(sections.id, parsed.data.repeatSectionId!));
+        repeatSection = repeatSectionRows[0];
+        if (!repeatSection) return reply.code(404).send({ error: { code: "not_found", message: "No such repeat section" } });
+      }
+
+      const rosterRows = await db
+        .select()
+        .from(students)
+        .where(and(eq(students.currentSectionId, fromSection.id), eq(students.status, "active")));
+      const rosterIds = new Set(rosterRows.map((s) => s.id));
+      for (const id of repeatingIds) {
+        if (!rosterIds.has(id)) {
+          return reply.code(400).send({ error: { code: "not_in_section", message: "A repeating student must be in the section being promoted" } });
+        }
+      }
+
+      const promotedStudents = rosterRows.filter((s) => !repeatingIds.has(s.id));
+      const repeatedStudents = rosterRows.filter((s) => repeatingIds.has(s.id));
+
+      // Capacity re-checked here for the same reason admissions re-checks
+      // it at admit time (Flow 2's own edge case) — sections can already
+      // hold students by the time a promotion is actually confirmed.
+      const [toCurrentCount, repeatCurrentCount] = await Promise.all([
+        db.select().from(students).where(eq(students.currentSectionId, toSection.id)),
+        repeatSection ? db.select().from(students).where(eq(students.currentSectionId, repeatSection.id)) : Promise.resolve([]),
+      ]);
+      if (toCurrentCount.length + promotedStudents.length > toSection.capacity) {
+        return reply.code(400).send({ error: { code: "target_full", message: "The target section doesn't have enough capacity" } });
+      }
+      if (repeatSection && repeatCurrentCount.length + repeatedStudents.length > repeatSection.capacity) {
+        return reply.code(400).send({ error: { code: "repeat_section_full", message: "The repeat section doesn't have enough capacity" } });
+      }
+
+      await db.transaction(async (tx) => {
+        if (promotedStudents.length > 0) {
+          await tx
+            .update(students)
+            .set({ currentSectionId: toSection.id })
+            .where(inArray(students.id, promotedStudents.map((s) => s.id)));
+        }
+        if (repeatedStudents.length > 0) {
+          await tx
+            .update(students)
+            .set({ currentSectionId: repeatSection!.id })
+            .where(inArray(students.id, repeatedStudents.map((s) => s.id)));
+        }
+      });
+
+      await logAuditEvent(tenant.id, {
+        actorUserId: req.authUser!.sub,
+        action: "section.promoted",
+        entityType: "section",
+        entityId: fromSection.id,
+        detail: {
+          toSectionId: toSection.id,
+          repeatSectionId: repeatSection?.id ?? null,
+          promoted: promotedStudents.length,
+          repeated: repeatedStudents.length,
+        },
+      });
+
+      return reply.send({ promoted: promotedStudents.length, repeated: repeatedStudents.length });
+    },
+  );
 }
