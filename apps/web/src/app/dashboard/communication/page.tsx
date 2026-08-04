@@ -18,12 +18,24 @@ type NotificationRow = {
   errorMessage: string | null;
   sentAt: string | null;
 };
+type VoiceAiCallRow = {
+  id: string;
+  recipientName: string | null;
+  callType: string;
+  outcome: string;
+  transcript: string | null;
+  transferredToStaff: boolean;
+  occurredAt: string;
+};
 
 const STATUS_STYLE: Record<string, string> = {
   sent: "bg-success-soft text-success",
   delivered: "bg-success-soft text-success",
   failed: "bg-critical-soft text-critical",
   queued: "bg-warning-soft text-warning",
+  answered: "bg-success-soft text-success",
+  no_answer: "bg-warning-soft text-warning",
+  voicemail: "bg-info-soft text-info",
 };
 
 // Phase 2 §D1/D3, Flow 3. Announcements go out immediately on send (no
@@ -40,6 +52,7 @@ export default function CommunicationPage() {
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [notificationTypeFilter, setNotificationTypeFilter] = useState("");
+  const [voiceAiCalls, setVoiceAiCalls] = useState<VoiceAiCallRow[]>([]);
 
   const [announcementForm, setAnnouncementForm] = useState({ title: "", body: "", targetScope: "school", targetRef: "" });
   const [announcementResult, setAnnouncementResult] = useState<{ recipients: number; sent: number; failed: number } | null>(null);
@@ -61,6 +74,10 @@ export default function CommunicationPage() {
     api.listNotifications(notificationTypeFilter || undefined).then((res) => setNotifications(res.notifications));
   }
   useEffect(refreshNotifications, [notificationTypeFilter]);
+
+  useEffect(() => {
+    api.listVoiceAiCalls().then((res) => setVoiceAiCalls(res.calls));
+  }, []);
 
   async function submitAnnouncement(e: React.FormEvent) {
     e.preventDefault();
@@ -298,6 +315,31 @@ export default function CommunicationPage() {
           ))}
         </ul>
         {notifications.length === 0 && <p className="mt-2 text-sm text-ink-muted">Nothing sent yet.</p>}
+      </section>
+
+      <section className="mt-8">
+        <h3 className="text-sm font-semibold text-ink">Voice AI Call Log</h3>
+        <p className="mt-1 text-sm text-ink-muted">
+          No Voice AI vendor is configured yet — every call below is simulated so the guardian preference, opt-out, and this log are
+          real and testable now. Real calls start the moment a vendor is wired in, with no change to how this page reads them.
+        </p>
+        <ul className="mt-3 flex flex-col divide-y divide-border rounded border border-border bg-surface">
+          {voiceAiCalls.slice(0, 50).map((c) => (
+            <li key={c.id} className="flex flex-col gap-1 px-4 py-2 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-ink">
+                  {c.recipientName} — {c.callType.replace("_", " ")} call
+                </span>
+                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[c.outcome] ?? "bg-info-soft text-info"}`}>
+                  {c.outcome.replace("_", " ")}
+                </span>
+              </div>
+              {c.transcript && <p className="text-ink-muted">{c.transcript}</p>}
+              {c.transferredToStaff && <p className="text-warning">Guardian requested transfer to the school office.</p>}
+            </li>
+          ))}
+        </ul>
+        {voiceAiCalls.length === 0 && <p className="mt-2 text-sm text-ink-muted">No calls placed yet.</p>}
       </section>
     </div>
   );

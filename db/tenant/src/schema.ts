@@ -172,13 +172,20 @@ export const students = pgTable("students", {
 // absence alerts. Voice AI opt-out stays deferred until Milestone 10
 // actually builds Voice AI (and "voice_ai" isn't a selectable preference
 // value yet for the same reason: there's nothing to route it to).
-export const notificationChannelPreferenceEnum = pgEnum("notification_channel_preference", ["whatsapp", "sms", "all"]);
+// Milestone 10 adds the "voice_ai" value (Phase 2 §B3's original four
+// options: WhatsApp/SMS/Voice AI/all) now that a module exists to read
+// it. voice_ai_opt_out is the separate flag Flow 3's own diagram
+// distinguishes from this preference: a guardian can choose "voice_ai" as
+// their preference yet still opt out of calls specifically (falling back
+// to WhatsApp/SMS), rather than opt-out being just "don't pick voice_ai."
+export const notificationChannelPreferenceEnum = pgEnum("notification_channel_preference", ["whatsapp", "sms", "voice_ai", "all"]);
 
 export const guardians = pgTable("guardians", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull().unique().references(() => users.id),
   cnic: text("cnic"),
   notificationChannelPreference: notificationChannelPreferenceEnum("notification_channel_preference").notNull().default("all"),
+  voiceAiOptOut: boolean("voice_ai_opt_out").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -538,5 +545,33 @@ export const announcements = pgTable("announcements", {
   targetRef: uuid("target_ref"),
   createdBy: uuid("created_by").notNull().references(() => users.id),
   sentAt: timestamp("sent_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// --- Milestone 10: Voice AI, V1 scope (Phase 2 §D3, Phase 5 §4.7) ---
+//
+// Deliberately narrow, per the PRD's own scoping: exactly the two call
+// types Flow 3 (absence) and Flow 6 (overdue fee) call for, not the full
+// conversational-workflow vision. At the user's explicit request, actual
+// call placement stays simulated until a Voice AI vendor is chosen and
+// wired in (apps/api/src/services/messaging/voiceAiSender.ts explains why
+// that's a bigger follow-up than the WhatsApp/SMS senders' "just set two
+// env vars" — a real vendor integration here is async/webhook-driven, not
+// a synchronous send-and-get-result call) — but the table, the
+// preference, the opt-out, and the outcome log are all real now, so
+// nothing about this shape needs to change once a vendor is picked.
+export const voiceAiCallTypeEnum = pgEnum("voice_ai_call_type", ["fee_reminder", "absence_alert"]);
+export const voiceAiOutcomeEnum = pgEnum("voice_ai_outcome", ["answered", "no_answer", "voicemail"]);
+
+export const voiceAiCalls = pgTable("voice_ai_calls", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  guardianId: uuid("guardian_id").notNull().references(() => guardians.id),
+  callType: voiceAiCallTypeEnum("call_type").notNull(),
+  relatedEntityType: text("related_entity_type").notNull(),
+  relatedEntityId: uuid("related_entity_id").notNull(),
+  outcome: voiceAiOutcomeEnum("outcome").notNull(),
+  transcript: text("transcript"),
+  transferredToStaff: boolean("transferred_to_staff").notNull().default(false),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

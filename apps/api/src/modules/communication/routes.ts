@@ -12,7 +12,12 @@ import {
   users,
   userPermissionOverrides,
 } from "@school-os/db-tenant";
-import { createLeaveRequestSchema, createAnnouncementSchema, updateChannelPreferenceSchema } from "@school-os/validation";
+import {
+  createLeaveRequestSchema,
+  createAnnouncementSchema,
+  updateChannelPreferenceSchema,
+  updateVoiceAiOptOutSchema,
+} from "@school-os/validation";
 import { hasPermission, type PermissionOverride, type UserRole } from "@school-os/permissions";
 import { getTenantDbConnection } from "../../db/tenant-registry.js";
 import { tenantResolutionMiddleware } from "../../middleware/tenant-resolution.js";
@@ -29,6 +34,19 @@ import { dispatchToGuardian } from "../../services/messaging/dispatch.js";
 // owned by any one feature area.
 export async function communicationRoutes(app: FastifyInstance) {
   const auth = [tenantResolutionMiddleware, requireAuth];
+
+  // Shared by both preference-style PATCH endpoints below: a guardian can
+  // always act on their own record; anyone else needs communication:write
+  // (e.g. staff updating it on a family's behalf after a phone call).
+  async function canActOnGuardian(
+    db: Awaited<ReturnType<typeof getTenantDbConnection>>,
+    authUser: { sub: string; role: string },
+    guardianUserId: string,
+  ): Promise<boolean> {
+    if (guardianUserId === authUser.sub) return true;
+    const overrideRows = await db.select().from(userPermissionOverrides).where(eq(userPermissionOverrides.userId, authUser.sub));
+    return hasPermission(authUser.role as UserRole, overrideRows[0]?.permissions as PermissionOverride | undefined, "communication", "write");
+  }
 
   app.post("/v1/leave-requests", { preHandler: [...auth, requirePermission("communication", "write")] }, async (req, reply) => {
     const parsed = createLeaveRequestSchema.safeParse(req.body);
@@ -82,21 +100,8 @@ export async function communicationRoutes(app: FastifyInstance) {
     const guardian = guardianRows[0];
     if (!guardian) return reply.code(404).send({ error: { code: "not_found", message: "No such guardian" } });
 
-    const isSelf = guardian.userId === req.authUser!.sub;
-    if (!isSelf) {
-      const overrideRows = await db
-        .select()
-        .from(userPermissionOverrides)
-        .where(eq(userPermissionOverrides.userId, req.authUser!.sub));
-      const canActOnBehalf = hasPermission(
-        req.authUser!.role as UserRole,
-        overrideRows[0]?.permissions as PermissionOverride | undefined,
-        "communication",
-        "write",
-      );
-      if (!canActOnBehalf) {
-        return reply.code(403).send({ error: { code: "forbidden", message: "You can only update your own communication preference" } });
-      }
+    if (!(await canActOnGuardian(db, req.authUser!, guardian.userId))) {
+      return reply.code(403).send({ error: { code: "forbidden", message: "You can only update your own communication preference" } });
     }
 
     const [updated] = await db
@@ -107,12 +112,43 @@ export async function communicationRoutes(app: FastifyInstance) {
     return reply.send({ guardian: { id: updated!.id, notificationChannelPreference: updated!.notificationChannelPreference } });
   });
 
+  // Milestone 10: the separate "opted out of Voice AI specifically" flag
+  // Flow 3's diagram distinguishes from the base channel preference — see
+  // the schema comment on guardians.voice_ai_opt_out.
+  app.patch("/v1/guardians/:guardianId/voice-ai-opt-out", { preHandler: auth }, async (req, reply) => {
+    const { guardianId } = req.params as { guardianId: string };
+    const parsed = updateVoiceAiOptOutSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: { code: "invalid_input", message: parsed.error.issues[0]?.message ?? "Invalid input" } });
+    }
+    const db = await getTenantDbConnection(req.tenant!.id);
+
+    const guardianRows = await db.select().from(guardians).where(eq(guardians.id, guardianId));
+    const guardian = guardianRows[0];
+    if (!guardian) return reply.code(404).send({ error: { code: "not_found", message: "No such guardian" } });
+
+    if (!(await canActOnGuardian(db, req.authUser!, guardian.userId))) {
+      return reply.code(403).send({ error: { code: "forbidden", message: "You can only update your own Voice AI opt-out" } });
+    }
+
+    const [updated] = await db
+      .update(guardians)
+      .set({ voiceAiOptOut: parsed.data.voiceAiOptOut })
+      .where(eq(guardians.id, guardianId))
+      .returning();
+    return reply.send({ guardian: { id: updated!.id, voiceAiOptOut: updated!.voiceAiOptOut } });
+  });
+
   app.get("/v1/guardians/me/preferences", { preHandler: auth }, async (req, reply) => {
     const db = await getTenantDbConnection(req.tenant!.id);
     const guardianRows = await db.select().from(guardians).where(eq(guardians.userId, req.authUser!.sub));
     const guardian = guardianRows[0];
     if (!guardian) return reply.code(404).send({ error: { code: "not_found", message: "You're not a guardian on this account" } });
-    return reply.send({ guardianId: guardian.id, notificationChannelPreference: guardian.notificationChannelPreference });
+    return reply.send({
+      guardianId: guardian.id,
+      notificationChannelPreference: guardian.notificationChannelPreference,
+      voiceAiOptOut: guardian.voiceAiOptOut,
+    });
   });
 
   // Compose and send in one action (Phase 2 §D3's AC doesn't describe a

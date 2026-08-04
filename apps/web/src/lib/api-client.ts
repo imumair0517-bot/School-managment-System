@@ -213,4 +213,10 @@ export const api = {
     apiFetch("/v1/announcements", { method: "POST", body: JSON.stringify(input) }),
   listAnnouncements: () => apiFetch("/v1/announcements"),
   getMyNotifications: () => apiFetch("/v1/notifications/mine"),
+
+  // Voice AI (Milestone 10 — scaffolded, call placement simulated pending a vendor)
+  updateVoiceAiOptOut: (guardianId: string, voiceAiOptOut: boolean) =>
+    apiFetch(`/v1/guardians/${guardianId}/voice-ai-opt-out`, { method: "PATCH", body: JSON.stringify({ voiceAiOptOut }) }),
+  listVoiceAiCalls: (type?: string) => apiFetch(`/v1/voice-ai-calls${type ? `?type=${type}` : ""}`),
+  getMyVoiceAiCalls: () => apiFetch("/v1/voice-ai-calls/mine"),
 };

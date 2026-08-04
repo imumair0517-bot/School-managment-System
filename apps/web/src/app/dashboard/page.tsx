@@ -55,10 +55,10 @@ export default function DashboardPage() {
       </p>
 
       <div className="mt-8 rounded border border-dashed border-border p-8 text-center text-ink-muted">
-        Nothing here yet on Home — Voice AI gets built in the milestones
-        that follow (Phase 13). Admissions, Students, Attendance,
-        Timetable, Homework, Exams/Report Cards, Finance, and
-        Communication are live now — see the menu above.
+        Everything through Milestone 10 (Phase 13) is live — Admissions,
+        Students, Attendance, Timetable, Homework, Exams/Report Cards,
+        Finance, and Communication — see the menu above. Voice AI calls
+        are simulated until a real vendor is configured.
       </div>
     </div>
   );
@@ -88,25 +88,36 @@ function ParentHome() {
         <AttendanceHistory key={child.id} title={`${child.fullName} — ${child.sectionName ?? "no section"}`} studentId={child.id} />
       ))}
       <NotificationsHistory />
+      <VoiceAiCallsHistory />
     </div>
   );
 }
 
-const CHANNEL_LABELS: Record<string, string> = { whatsapp: "WhatsApp only", sms: "SMS only", all: "WhatsApp and SMS" };
+const CHANNEL_LABELS: Record<string, string> = {
+  whatsapp: "WhatsApp only",
+  sms: "SMS only",
+  voice_ai: "Voice AI calls",
+  all: "WhatsApp and SMS",
+};
 
 // Milestone 9's own self-service piece (Phase 2 §E's Parent Portal
-// "communication preferences") — updates take effect on the very next
-// fee reminder / absence alert / announcement sent, since every send
-// reads this at dispatch time (see dispatchToGuardian's own note).
+// "communication preferences"), extended in Milestone 10 with the
+// Voice AI option and its own separate opt-out (Flow 3's own distinction
+// — see the schema note on guardians.voice_ai_opt_out). Updates take
+// effect on the very next fee reminder / absence alert / announcement
+// sent, since every send reads this at dispatch time (see
+// dispatchToGuardian's own note).
 function NotificationPreference() {
   const [guardianId, setGuardianId] = useState<string | null>(null);
   const [preference, setPreference] = useState<string | null>(null);
+  const [voiceAiOptOut, setVoiceAiOptOut] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     api.getMyPreference().then((res) => {
       setGuardianId(res.guardianId);
       setPreference(res.notificationChannelPreference);
+      setVoiceAiOptOut(res.voiceAiOptOut);
     });
   }, []);
 
@@ -116,6 +127,17 @@ function NotificationPreference() {
     try {
       await api.updateGuardianPreference(guardianId, value);
       setPreference(value);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleOptOutChange(value: boolean) {
+    if (!guardianId) return;
+    setSaving(true);
+    try {
+      await api.updateVoiceAiOptOut(guardianId, value);
+      setVoiceAiOptOut(value);
     } finally {
       setSaving(false);
     }
@@ -138,6 +160,41 @@ function NotificationPreference() {
           </option>
         ))}
       </select>
+      {preference === "voice_ai" && (
+        <label className="mt-2 flex items-center gap-2 text-sm text-ink">
+          <input type="checkbox" checked={voiceAiOptOut} disabled={saving} onChange={(e) => handleOptOutChange(e.target.checked)} />
+          Actually, don&apos;t call me — send WhatsApp/SMS instead
+        </label>
+      )}
+    </section>
+  );
+}
+
+function VoiceAiCallsHistory() {
+  const [items, setItems] = useState<{ id: string; callType: string; outcome: string; transcript: string | null; occurredAt: string }[] | null>(
+    null,
+  );
+
+  useEffect(() => {
+    api.getMyVoiceAiCalls().then((res) => setItems(res.calls));
+  }, []);
+
+  if (!items || items.length === 0) return null;
+
+  return (
+    <section>
+      <h3 className="text-sm font-semibold text-ink">Calls</h3>
+      <ul className="mt-2 flex flex-col gap-2">
+        {items.slice(0, 20).map((c) => (
+          <li key={c.id} className="rounded border border-border bg-surface p-3 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="font-medium text-ink">{c.callType.replace("_", " ")} call</span>
+              <span className="text-ink-muted">{c.outcome.replace("_", " ")}</span>
+            </div>
+            {c.transcript && <p className="mt-1 whitespace-pre-wrap text-ink-muted">{c.transcript}</p>}
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

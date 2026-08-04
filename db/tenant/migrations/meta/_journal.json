@@ -64,6 +64,13 @@
       "when": 1785795291125,
       "tag": "0008_damp_mantis",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1785886596899,
+      "tag": "0009_flimsy_monster_badoon",
+      "breakpoints": true
     }
   ]
 }

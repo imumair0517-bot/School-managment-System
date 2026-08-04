@@ -3,10 +3,15 @@ import { z } from "zod";
 // Milestone 9 — leave requests (suppress absence alerts, Flow 3), guardian
 // channel preference, and targeted announcements (Phase 2 §D1/D3).
 
-export const channelPreferences = ["whatsapp", "sms", "all"] as const;
+// "voice_ai" added in Milestone 10 (Phase 2 §B3's original four options).
+export const channelPreferences = ["whatsapp", "sms", "voice_ai", "all"] as const;
 
 export const updateChannelPreferenceSchema = z.object({
   channelPreference: z.enum(channelPreferences),
+});
+
+export const updateVoiceAiOptOutSchema = z.object({
+  voiceAiOptOut: z.boolean(),
 });
 
 export const createLeaveRequestSchema = z.object({
