@@ -221,4 +221,19 @@ export const api = {
     apiFetch(`/v1/guardians/${guardianId}/voice-ai-opt-out`, { method: "PATCH", body: JSON.stringify({ voiceAiOptOut }) }),
   listVoiceAiCalls: (type?: string) => apiFetch(`/v1/voice-ai-calls${type ? `?type=${type}` : ""}`),
   getMyVoiceAiCalls: () => apiFetch("/v1/voice-ai-calls/mine"),
+
+  // Staff attendance & leave (Milestone 13, Phase 2 §F)
+  markStaffAttendance: (input: { staffUserId: string; date: string; status: string }) =>
+    apiFetch("/v1/staff-attendance", { method: "POST", body: JSON.stringify(input) }),
+  getStaffAttendanceForDate: (date: string) => apiFetch(`/v1/staff-attendance?date=${date}`),
+  getMyStaffAttendance: () => apiFetch("/v1/me/staff-attendance"),
+  listLeaveTypes: () => apiFetch("/v1/staff-leave-types"),
+  createLeaveType: (input: { name: string; annualQuotaDays: number }) =>
+    apiFetch("/v1/staff-leave-types", { method: "POST", body: JSON.stringify(input) }),
+  fileMyLeaveRequest: (input: { leaveTypeId: string; startDate: string; endDate: string; reason: string }) =>
+    apiFetch("/v1/me/leave-requests", { method: "POST", body: JSON.stringify(input) }),
+  getMyLeaveRequests: () => apiFetch("/v1/me/leave-requests"),
+  listStaffLeaveRequests: (status?: string) => apiFetch(`/v1/staff-leave-requests${status ? `?status=${status}` : ""}`),
+  decideStaffLeaveRequest: (leaveRequestId: string, status: "approved" | "rejected") =>
+    apiFetch(`/v1/staff-leave-requests/${leaveRequestId}/decide`, { method: "POST", body: JSON.stringify({ status }) }),
 };

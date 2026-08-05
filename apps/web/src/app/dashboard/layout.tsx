@@ -58,6 +58,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       label: "Promotion",
       show: me.user.role === "school_owner" || me.user.role === "principal",
     },
+    { href: "/dashboard/staff-hr", label: "Staff HR", show: me.permissions.staff !== "none" },
     { href: "/dashboard/team", label: "Team", show: me.permissions.users !== "none" },
     { href: "/dashboard/settings", label: "Settings", show: me.permissions.settings !== "none" },
   ];

@@ -575,3 +575,112 @@ export const voiceAiCalls = pgTable("voice_ai_calls", {
   occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// --- Milestone 13: Staff Attendance & Leave (Phase 2 §F) ---
+//
+// Deliberately mirrors student_attendance's shape (daily-marked status,
+// not check-in/out timestamps) for the same reason timetable reused
+// sections rather than inventing a parallel concept: one attendance
+// pattern in the codebase, not two. HR/Principal/School Owner mark/correct
+// any staff member's day (the "staff" permission module below); a staff
+// member marking *their own* day is a self-scoped exception at the route
+// layer, the same shape as a guardian's self-scoped attendance view.
+//
+// Leave balance is deliberately not a stored/mutable column — Milestone 7's
+// invoices.status already set the precedent (drop a value that would need
+// a background job to stay correct; compute it at read time instead).
+// annualQuotaDays minus this calendar year's approved staff_leave_requests
+// days is computed in the route handler, not persisted here.
+
+export const staffAttendanceStatusEnum = pgEnum("staff_attendance_status", ["present", "absent", "late", "half_day", "leave"]);
+
+export const staffAttendance = pgTable("staff_attendance", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  staffUserId: uuid("staff_user_id").notNull().references(() => users.id),
+  date: date("date").notNull(),
+  status: staffAttendanceStatusEnum("status").notNull(),
+  markedBy: uuid("marked_by").notNull().references(() => users.id),
+  markedAt: timestamp("marked_at", { withTimezone: true }).notNull().defaultNow(),
+  editedAt: timestamp("edited_at", { withTimezone: true }),
+});
+
+export const staffLeaveTypes = pgTable("staff_leave_types", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull().unique(),
+  annualQuotaDays: integer("annual_quota_days").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const staffLeaveStatusEnum = pgEnum("staff_leave_status", ["pending", "approved", "rejected"]);
+
+// A staff member always requests their own leave (staffUserId is who it's
+// for, not who filed it — same person for every row Milestone 13 writes,
+// but kept separate from "approvedBy"/"decidedBy" the way every other
+// approval table in this file does, in case HR ever files on someone's
+// behalf).
+export const staffLeaveRequests = pgTable("staff_leave_requests", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  staffUserId: uuid("staff_user_id").notNull().references(() => users.id),
+  leaveTypeId: uuid("leave_type_id").notNull().references(() => staffLeaveTypes.id),
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date").notNull(),
+  reason: text("reason").notNull(),
+  status: staffLeaveStatusEnum("status").notNull().default("pending"),
+  decidedBy: uuid("decided_by").references(() => users.id),
+  decidedAt: timestamp("decided_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// --- Milestone 14: Payroll (Phase 2 §F) ---
+//
+// One active salary structure per staff member at a time (Milestone 14's
+// own scope: "salary structure per staff," not a versioned history of
+// raises) — a raise is a new row's worth of state on the *same* record,
+// via update, not a new record; payslips snapshot the amounts that were
+// true at generation time regardless, so history isn't lost either way.
+
+export const staffSalaryStructures = pgTable("staff_salary_structures", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  staffUserId: uuid("staff_user_id").notNull().unique().references(() => users.id),
+  basicSalary: integer("basic_salary").notNull(),
+  allowances: integer("allowances").notNull().default(0),
+  effectiveFrom: date("effective_from").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// A running ledger (loan given, installment repaid — both rows, signed by
+// `amount`), not a single "balance" column — Phase 5 Principle elsewhere
+// in this file (invoices/payments) always keeps the transaction history
+// and derives a balance by summing, rather than trusting a mutable total.
+export const staffLoanEntryTypeEnum = pgEnum("staff_loan_entry_type", ["loan", "repayment"]);
+
+export const staffLoanLedger = pgTable("staff_loan_ledger", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  staffUserId: uuid("staff_user_id").notNull().references(() => users.id),
+  entryType: staffLoanEntryTypeEnum("entry_type").notNull(),
+  amount: integer("amount").notNull(),
+  note: text("note"),
+  recordedBy: uuid("recorded_by").notNull().references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const payslipStatusEnum = pgEnum("payslip_status", ["draft", "finalized"]);
+
+// Every amount here is a snapshot at generation time (Phase 5's
+// "invoices don't recompute if fee structures change later" precedent,
+// applied to payroll) — a later raise or loan repayment must never change
+// what a January payslip says.
+export const payslips = pgTable("payslips", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  staffUserId: uuid("staff_user_id").notNull().references(() => users.id),
+  billingPeriod: text("billing_period").notNull(),
+  basicSalary: integer("basic_salary").notNull(),
+  allowances: integer("allowances").notNull(),
+  lwpDays: integer("lwp_days").notNull().default(0),
+  lwpDeduction: integer("lwp_deduction").notNull().default(0),
+  loanDeduction: integer("loan_deduction").notNull().default(0),
+  netPay: integer("net_pay").notNull(),
+  status: payslipStatusEnum("status").notNull().default("draft"),
+  generatedBy: uuid("generated_by").notNull().references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});

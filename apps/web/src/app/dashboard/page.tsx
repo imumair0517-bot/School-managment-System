@@ -54,12 +54,189 @@ export default function DashboardPage() {
         {me.user.fullName} · <span className="text-ink-muted">{me.user.role.replace("_", " ")}</span>
       </p>
 
+      <MyStaffLeave />
+
       <div className="mt-8 rounded border border-dashed border-border p-8 text-center text-ink-muted">
         Everything through Milestone 10 (Phase 13) is live — Admissions,
         Students, Attendance, Timetable, Homework, Exams/Report Cards,
         Finance, and Communication — see the menu above. Voice AI calls
         are simulated until a real vendor is configured.
       </div>
+    </div>
+  );
+}
+
+type LeaveType = { id: string; name: string; annualQuotaDays: number };
+type LeaveBalance = { leaveTypeId: string; leaveTypeName: string | null; annualQuotaDays: number; daysTaken: number; daysRemaining: number };
+type MyLeaveRequest = { id: string; leaveTypeName: string | null; startDate: string; endDate: string; reason: string; status: string };
+type StaffAttendanceRecord = { date: string; status: string };
+
+const LEAVE_STATUS_STYLE: Record<string, string> = {
+  pending: "bg-warning-soft text-warning",
+  approved: "bg-success-soft text-success",
+  rejected: "bg-critical-soft text-critical",
+};
+
+// Every staff role's self-service corner (Milestone 13, Phase 2 §F) — own
+// attendance history, leave balance, and a way to file a new request.
+// Self-scoped at the API layer (GET/POST /v1/me/...), so it needs no
+// "staff" permission at all — the same shape as a guardian's self-scoped
+// widgets on this page.
+function MyStaffLeave() {
+  const [attendance, setAttendance] = useState<StaffAttendanceRecord[] | null>(null);
+  const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
+  const [balances, setBalances] = useState<LeaveBalance[]>([]);
+  const [requests, setRequests] = useState<MyLeaveRequest[]>([]);
+  const [form, setForm] = useState({ leaveTypeId: "", startDate: "", endDate: "", reason: "" });
+  const [error, setError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [filed, setFiled] = useState(false);
+
+  function refreshLeave() {
+    api
+      .getMyLeaveRequests()
+      .then((res) => {
+        setBalances(res.balances);
+        setRequests(res.leaveRequests);
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load your leave history"));
+  }
+
+  useEffect(() => {
+    api
+      .getMyStaffAttendance()
+      .then((res) => setAttendance(res.attendance))
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load your attendance"));
+    api
+      .listLeaveTypes()
+      .then((res) => setLeaveTypes(res.leaveTypes))
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load leave types"));
+    refreshLeave();
+  }, []);
+
+  async function submitLeave(e: React.FormEvent) {
+    e.preventDefault();
+    setFormError(null);
+    setFiled(false);
+    try {
+      await api.fileMyLeaveRequest(form);
+      setForm({ leaveTypeId: "", startDate: "", endDate: "", reason: "" });
+      setFiled(true);
+      refreshLeave();
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Could not file leave request");
+    }
+  }
+
+  if (error) return <p className="mt-6 text-sm text-critical">{error}</p>;
+
+  return (
+    <div className="mt-8 flex flex-col gap-6">
+      <div>
+        <h3 className="text-sm font-semibold text-ink">My Attendance</h3>
+        {attendance && attendance.length > 0 ? (
+          <ul className="mt-2 flex flex-col gap-1">
+            {attendance.slice(0, 10).map((a) => (
+              <li key={a.date} className="flex items-center justify-between rounded border border-border bg-surface px-3 py-1.5 text-sm">
+                <span className="text-ink-muted">{a.date}</span>
+                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[a.status] ?? ""}`}>{a.status.replace("_", " ")}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          attendance && <p className="mt-1 text-sm text-ink-muted">No attendance recorded yet.</p>
+        )}
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold text-ink">My Leave Balance</h3>
+        {balances.length > 0 ? (
+          <ul className="mt-2 flex flex-wrap gap-2">
+            {balances.map((b) => (
+              <li key={b.leaveTypeId} className="rounded-full bg-surface px-3 py-1 text-xs text-ink-muted">
+                {b.leaveTypeName}: {b.daysRemaining}/{b.annualQuotaDays} days left
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-1 text-sm text-ink-muted">No leave types configured yet.</p>
+        )}
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold text-ink">Request Leave</h3>
+        <form onSubmit={submitLeave} className="mt-2 flex flex-wrap items-end gap-3 rounded border border-border bg-surface p-4">
+          <label className="flex flex-col gap-1 text-sm text-ink">
+            Type
+            <select
+              value={form.leaveTypeId}
+              onChange={(e) => setForm({ ...form, leaveTypeId: e.target.value })}
+              className="rounded border border-border bg-bg px-3 py-2 text-ink outline-none focus:border-accent"
+            >
+              <option value="">Choose a type…</option>
+              {leaveTypes.map((lt) => (
+                <option key={lt.id} value={lt.id}>
+                  {lt.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-ink">
+            Start date
+            <input
+              type="date"
+              value={form.startDate}
+              onChange={(e) => setForm({ ...form, startDate: e.target.value })}
+              className="rounded border border-border bg-bg px-3 py-2 text-ink outline-none focus:border-accent"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-ink">
+            End date
+            <input
+              type="date"
+              value={form.endDate}
+              onChange={(e) => setForm({ ...form, endDate: e.target.value })}
+              className="rounded border border-border bg-bg px-3 py-2 text-ink outline-none focus:border-accent"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-ink">
+            Reason
+            <input
+              value={form.reason}
+              onChange={(e) => setForm({ ...form, reason: e.target.value })}
+              className="rounded border border-border bg-bg px-3 py-2 text-ink outline-none focus:border-accent"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={!form.leaveTypeId || !form.startDate || !form.endDate || !form.reason.trim()}
+            className="rounded bg-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+          >
+            Submit request
+          </button>
+        </form>
+        {formError && <p className="mt-2 text-sm text-critical">{formError}</p>}
+        {filed && <p className="mt-2 text-sm text-success">Leave request submitted.</p>}
+      </div>
+
+      {requests.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-ink">My Requests</h3>
+          <ul className="mt-2 flex flex-col gap-2">
+            {requests.map((r) => (
+              <li key={r.id} className="rounded border border-border bg-surface p-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-ink">{r.leaveTypeName}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${LEAVE_STATUS_STYLE[r.status] ?? ""}`}>{r.status}</span>
+                </div>
+                <p className="mt-1 text-ink-muted">
+                  {r.startDate} – {r.endDate}: {r.reason}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

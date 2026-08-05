@@ -10,3 +10,4 @@ export * from "./report-cards.js";
 export * from "./finance.js";
 export * from "./tags.js";
 export * from "./communication.js";
+export * from "./staff-hr.js";

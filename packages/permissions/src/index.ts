@@ -43,6 +43,14 @@ export type UserRole =
 // (Phase 2 §D3's own actor); tags stayed under "finance" in Milestone 8
 // since fee reminders were their only consumer at the time — this module
 // is what they'd move under if a second consumer ever needs them.
+// Milestone 13 adds "staff" (staff attendance/leave — HR's own domain
+// module, its first real one; HR previously had nothing to write) and
+// "payroll" (salary structures, loans, payslips) as a *separate* module
+// from "staff" even though HR owns both by default — payroll is
+// compensation data, more sensitive than "who took leave when," so a
+// tenant that wants to grant a Principal staff-leave approval without
+// salary visibility can (a per-user override on "payroll" alone), which a
+// single combined module couldn't express. Milestone 16 adds "reports".
 export type PermissionModule =
   | "users"
   | "settings"
@@ -52,7 +60,10 @@ export type PermissionModule =
   | "homework"
   | "exams"
   | "finance"
-  | "communication";
+  | "communication"
+  | "staff"
+  | "payroll"
+  | "reports";
 
 export type PermissionLevel = "none" | "read" | "write";
 
@@ -71,10 +82,12 @@ export const ROLE_DEFAULTS: Record<UserRole, Record<PermissionModule, Permission
   school_owner: {
     users: "write", settings: "write", admissions: "write", academic: "write", attendance: "write",
     homework: "write", exams: "write", finance: "write", communication: "write",
+    staff: "write", payroll: "write", reports: "write",
   },
   principal: {
     users: "write", settings: "write", admissions: "write", academic: "write", attendance: "write",
     homework: "write", exams: "write", finance: "write", communication: "write",
+    staff: "write", payroll: "write", reports: "write",
   },
   // Admin Staff runs admissions day-to-day by default (Phase 2 §B1) and
   // needs to see/manage the structure students enroll into — but not
@@ -90,10 +103,17 @@ export const ROLE_DEFAULTS: Record<UserRole, Record<PermissionModule, Permission
   admin_staff: {
     users: "none", settings: "none", admissions: "write", academic: "write", attendance: "write",
     homework: "read", exams: "read", finance: "write", communication: "write",
+    staff: "none", payroll: "none", reports: "read",
   },
+  // HR's first real modules (Milestone 13/14) — staff attendance/leave and
+  // payroll are exactly HR's job, separate from admin_staff's day-to-day
+  // front-office modules above. users:read (unchanged from before) lets HR
+  // look up a staff directory entry; it still can't create/edit accounts,
+  // which stays school_owner/principal-only.
   hr: {
     users: "read", settings: "none", admissions: "none", academic: "none", attendance: "none",
     homework: "none", exams: "none", finance: "none", communication: "none",
+    staff: "write", payroll: "write", reports: "read",
   },
   // Teachers can look up students/classes (their own roster, later
   // scoped further) but don't run admissions or edit school structure —
@@ -102,9 +122,15 @@ export const ROLE_DEFAULTS: Record<UserRole, Record<PermissionModule, Permission
   // Absence alerts fire automatically off their own attendance submission
   // regardless of this module's level — communication:none here only
   // means a teacher can't record a leave request or send an announcement.
+  // staff:none/payroll:none here means "can't see another staff member's
+  // record or run payroll" — a teacher viewing/requesting *their own*
+  // attendance and payslips is a self-scoped route-layer exception (the
+  // same shape as a parent's self-scoped attendance view), not something
+  // this table controls.
   teacher: {
     users: "none", settings: "none", admissions: "none", academic: "read", attendance: "write",
     homework: "write", exams: "write", finance: "none", communication: "none",
+    staff: "none", payroll: "none", reports: "none",
   },
   // A guardian reads their own children's attendance/homework/results
   // (self-scoped at the API layer, not by this table — see
@@ -118,10 +144,12 @@ export const ROLE_DEFAULTS: Record<UserRole, Record<PermissionModule, Permission
   parent: {
     users: "none", settings: "none", admissions: "none", academic: "none", attendance: "read",
     homework: "read", exams: "read", finance: "read", communication: "read",
+    staff: "none", payroll: "none", reports: "none",
   },
   student: {
     users: "none", settings: "none", admissions: "none", academic: "none", attendance: "read",
     homework: "read", exams: "read", finance: "none", communication: "none",
+    staff: "none", payroll: "none", reports: "none",
   },
 };
 
