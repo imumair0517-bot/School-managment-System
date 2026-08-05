@@ -17,6 +17,7 @@ import { voiceAiRoutes } from "./modules/voice-ai/routes.js";
 import { staffHrRoutes } from "./modules/staff-hr/routes.js";
 import { examPapersRoutes } from "./modules/exam-papers/routes.js";
 import { reportsRoutes } from "./modules/reports/routes.js";
+import { billingRoutes } from "./modules/billing/routes.js";
 
 export function buildApp() {
   const app = Fastify({ logger: true });
@@ -55,6 +56,7 @@ export function buildApp() {
   app.register(staffHrRoutes);
   app.register(examPapersRoutes);
   app.register(reportsRoutes);
+  app.register(billingRoutes);
 
   return app;
 }

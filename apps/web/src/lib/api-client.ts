@@ -261,4 +261,20 @@ export const api = {
   listReportEntities: () => apiFetch("/v1/reports/entities"),
   runReport: (input: { entity: string; fields: string[]; filters?: Record<string, string> }) =>
     apiFetch("/v1/reports/run", { method: "POST", body: JSON.stringify(input) }),
+
+  // Platform Billing & Auto-Billing (Milestone 17, Super Admin only)
+  listPlans: () => apiFetch("/v1/admin/plans"),
+  createPlan: (input: { name: string; priceMonthly: number; studentCap?: number }) =>
+    apiFetch("/v1/admin/plans", { method: "POST", body: JSON.stringify(input) }),
+  updatePlan: (planId: string, input: { priceMonthly?: number; studentCap?: number; isActive?: boolean }) =>
+    apiFetch(`/v1/admin/plans/${planId}`, { method: "PATCH", body: JSON.stringify(input) }),
+  getTenantSubscription: (tenantId: string) => apiFetch(`/v1/admin/tenants/${tenantId}/subscription`),
+  setTenantSubscription: (tenantId: string, input: { planId: string; billingCycle: string; currentPeriodStart: string; currentPeriodEnd: string }) =>
+    apiFetch(`/v1/admin/tenants/${tenantId}/subscription`, { method: "POST", body: JSON.stringify(input) }),
+  listTenantInvoices: (tenantId: string) => apiFetch(`/v1/admin/tenants/${tenantId}/invoices`),
+  generatePlatformInvoices: (input: { billingPeriod: string; dueDate: string }) =>
+    apiFetch("/v1/admin/billing/generate-invoices", { method: "POST", body: JSON.stringify(input) }),
+  recordPlatformPayment: (invoiceId: string, input: { amount: number; method: string; providerReference?: string }) =>
+    apiFetch(`/v1/admin/platform-invoices/${invoiceId}/record-payment`, { method: "POST", body: JSON.stringify(input) }),
+  runDunning: () => apiFetch("/v1/admin/billing/run-dunning", { method: "POST" }),
 };

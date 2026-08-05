@@ -15,6 +15,13 @@
       "when": 1785668484252,
       "tag": "0001_windy_vulture",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785958298316,
+      "tag": "0002_old_shard",
+      "breakpoints": true
     }
   ]
 }
