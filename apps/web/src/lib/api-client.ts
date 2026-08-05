@@ -249,4 +249,11 @@ export const api = {
   listPayslips: (billingPeriod?: string) => apiFetch(`/v1/payroll/payslips${billingPeriod ? `?billingPeriod=${encodeURIComponent(billingPeriod)}` : ""}`),
   finalizePayslip: (payslipId: string) => apiFetch(`/v1/payroll/payslips/${payslipId}/finalize`, { method: "POST" }),
   getMyPayslips: () => apiFetch("/v1/me/payslips"),
+
+  // AI Exam Generator (Milestone 15, Phase 2 §F)
+  generateExamPaper: (examSubjectId: string, input: { topicOrChapter: string; questionCount: number; questionType: string }) =>
+    apiFetch(`/v1/exam-subjects/${examSubjectId}/question-paper/generate`, { method: "POST", body: JSON.stringify(input) }),
+  approveExamPaper: (examSubjectId: string, input: { content: string; aiGenerated?: boolean }) =>
+    apiFetch(`/v1/exam-subjects/${examSubjectId}/question-paper/approve`, { method: "POST", body: JSON.stringify(input) }),
+  getExamPaper: (examSubjectId: string) => apiFetch(`/v1/exam-subjects/${examSubjectId}/question-paper`),
 };

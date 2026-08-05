@@ -234,13 +234,181 @@ function ExamSubjectRow({ examSubject, sections }: { examSubject: ExamSubject; s
       </button>
       {open && (
         <div className="border-t border-border p-4">
-          {sections.length === 0 && <p className="text-sm text-ink-muted">No sections in this class yet.</p>}
+          <QuestionPaperSection examSubjectId={examSubject.id} totalMarks={examSubject.totalMarks} />
+          {sections.length === 0 && <p className="mt-4 text-sm text-ink-muted">No sections in this class yet.</p>}
           {sections.map((s) => (
             <MarksGrid key={s.id} examSubjectId={examSubject.id} totalMarks={examSubject.totalMarks} sectionId={s.id} sectionName={s.name} />
           ))}
         </div>
       )}
     </li>
+  );
+}
+
+type QuestionPaper = { finalContent: string | null; aiGenerated: boolean; approvedAt: string | null } | null;
+
+const QUESTION_TYPES = [
+  { value: "mcq", label: "Multiple choice" },
+  { value: "short_answer", label: "Short answer" },
+  { value: "long_answer", label: "Long answer" },
+  { value: "mixed", label: "Mixed" },
+];
+
+// The generate/approve pattern (Phase 7 §7) applied a third time — see
+// homework's and report cards' own AI sections for the same shape: a
+// draft is never visible until a teacher explicitly approves it.
+function QuestionPaperSection({ examSubjectId, totalMarks }: { examSubjectId: string; totalMarks: number }) {
+  const [paper, setPaper] = useState<QuestionPaper>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [form, setForm] = useState({ topicOrChapter: "", questionCount: "10", questionType: "mixed" });
+  const [draft, setDraft] = useState<string | null>(null);
+  const [mode, setMode] = useState<"view" | "form" | "review">("view");
+  const [generating, setGenerating] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .getExamPaper(examSubjectId)
+      .then((res) => {
+        setPaper(res.questionPaper);
+        setLoaded(true);
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load the question paper"));
+  }, [examSubjectId]);
+
+  async function handleGenerate() {
+    setError(null);
+    setGenerating(true);
+    try {
+      const res = await api.generateExamPaper(examSubjectId, {
+        topicOrChapter: form.topicOrChapter,
+        questionCount: Number(form.questionCount),
+        questionType: form.questionType,
+      });
+      setDraft(res.draft);
+      setMode("review");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not generate a draft");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function handleApprove() {
+    if (!draft) return;
+    setError(null);
+    setSaving(true);
+    try {
+      const res = await api.approveExamPaper(examSubjectId, { content: draft, aiGenerated: true });
+      setPaper(res.questionPaper);
+      setMode("view");
+      setDraft(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save the question paper");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!loaded) return null;
+
+  return (
+    <div className="mb-4 rounded border border-border bg-bg p-3">
+      <div className="flex items-center justify-between">
+        <h5 className="text-sm font-semibold text-ink">Question Paper</h5>
+        {paper?.finalContent && mode === "view" && (
+          <button onClick={() => setMode("form")} className="text-sm text-accent underline">
+            Regenerate
+          </button>
+        )}
+      </div>
+
+      {error && <p className="mt-2 text-sm text-critical">{error}</p>}
+
+      {paper?.finalContent && mode === "view" ? (
+        <p className="mt-2 whitespace-pre-wrap rounded border border-border bg-surface p-3 text-sm text-ink-muted">{paper.finalContent}</p>
+      ) : mode === "view" ? (
+        <button onClick={() => setMode("form")} className="mt-2 rounded bg-accent px-3 py-1.5 text-sm font-medium text-white">
+          Draft with AI
+        </button>
+      ) : mode === "form" ? (
+        <div className="mt-2 flex flex-wrap items-end gap-3">
+          <label className="flex flex-col gap-1 text-sm text-ink">
+            Topic/chapter
+            <input
+              value={form.topicOrChapter}
+              onChange={(e) => setForm({ ...form, topicOrChapter: e.target.value })}
+              placeholder="e.g. Photosynthesis"
+              className="rounded border border-border bg-bg px-3 py-2 text-ink outline-none focus:border-accent"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-ink">
+            Question count
+            <input
+              type="number"
+              min={1}
+              max={50}
+              value={form.questionCount}
+              onChange={(e) => setForm({ ...form, questionCount: e.target.value })}
+              className="w-20 rounded border border-border bg-bg px-3 py-2 text-ink outline-none focus:border-accent"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-ink">
+            Question type
+            <select
+              value={form.questionType}
+              onChange={(e) => setForm({ ...form, questionType: e.target.value })}
+              className="rounded border border-border bg-bg px-3 py-2 text-ink outline-none focus:border-accent"
+            >
+              {QUESTION_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <span className="text-sm text-ink-muted">Out of {totalMarks} marks</span>
+          <button
+            onClick={handleGenerate}
+            disabled={generating || !form.topicOrChapter.trim()}
+            className="rounded bg-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+          >
+            {generating ? "Generating…" : "Generate draft"}
+          </button>
+          <button onClick={() => setMode("view")} className="text-sm text-ink-muted underline">
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <div className="mt-2">
+          <span className="rounded-full bg-info-soft px-2 py-0.5 text-xs font-medium text-info">AI draft — review before approving</span>
+          <textarea
+            value={draft ?? ""}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={10}
+            className="mt-2 w-full rounded border border-dashed border-info bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-accent"
+          />
+          <div className="mt-2 flex items-center gap-3">
+            <button onClick={handleApprove} disabled={saving} className="rounded bg-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
+              {saving ? "Saving…" : "Approve & save"}
+            </button>
+            <button onClick={handleGenerate} className="text-sm text-ink-muted underline">
+              Regenerate
+            </button>
+            <button
+              onClick={() => {
+                setMode("view");
+                setDraft(null);
+              }}
+              className="text-sm text-ink-muted underline"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

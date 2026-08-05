@@ -15,6 +15,7 @@ import { tagsRoutes } from "./modules/tags/routes.js";
 import { communicationRoutes } from "./modules/communication/routes.js";
 import { voiceAiRoutes } from "./modules/voice-ai/routes.js";
 import { staffHrRoutes } from "./modules/staff-hr/routes.js";
+import { examPapersRoutes } from "./modules/exam-papers/routes.js";
 
 export function buildApp() {
   const app = Fastify({ logger: true });
@@ -51,6 +52,7 @@ export function buildApp() {
   app.register(communicationRoutes);
   app.register(voiceAiRoutes);
   app.register(staffHrRoutes);
+  app.register(examPapersRoutes);
 
   return app;
 }

@@ -691,3 +691,25 @@ export const payslips = pgTable("payslips", {
   generatedBy: uuid("generated_by").notNull().references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// --- Milestone 15: AI Exam Generator (Phase 2 §F) ---
+//
+// One question paper per exam_subject (a paper is "the Grade 8 Math paper
+// for the Mid-Term," which is exactly what an exam_subject row already
+// identifies — no new grade/topic-scoping concept needed). finalContent
+// stays null until a teacher approves it, the same aiApprovedBy-shaped
+// enforcement Milestone 5's homework and Milestone 6's report-card
+// remarks already use for Phase 3 E1's "AI content always requires human
+// approval" rule — there is no code path that makes a draft visible to
+// anyone before this table's approve endpoint sets approvedBy.
+export const examQuestionPapers = pgTable("exam_question_papers", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  examSubjectId: uuid("exam_subject_id").notNull().unique().references(() => examSubjects.id),
+  aiDraftContent: text("ai_draft_content"),
+  finalContent: text("final_content"),
+  aiGenerated: boolean("ai_generated").notNull().default(false),
+  approvedBy: uuid("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
