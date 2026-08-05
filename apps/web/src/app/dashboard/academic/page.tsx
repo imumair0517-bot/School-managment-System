@@ -26,11 +26,12 @@ export default function AcademicSetupPage() {
   const [error, setError] = useState<string | null>(null);
 
   function refresh() {
-    api.listAcademicSessions().then((res) => setSessions(res.sessions));
-    api.listClasses().then((res) => setClasses(res.classes));
-    api.listSections().then((res) => setSections(res.sections));
-    api.listSubjects().then((res) => setSubjects(res.subjects));
-    api.listTimetableSlots().then((res) => setSlots(res.slots));
+    const onLoadError = (err: unknown) => setError(err instanceof Error ? err.message : "Could not load academic setup data");
+    api.listAcademicSessions().then((res) => setSessions(res.sessions)).catch(onLoadError);
+    api.listClasses().then((res) => setClasses(res.classes)).catch(onLoadError);
+    api.listSections().then((res) => setSections(res.sections)).catch(onLoadError);
+    api.listSubjects().then((res) => setSubjects(res.subjects)).catch(onLoadError);
+    api.listTimetableSlots().then((res) => setSlots(res.slots)).catch(onLoadError);
   }
   useEffect(refresh, []);
 

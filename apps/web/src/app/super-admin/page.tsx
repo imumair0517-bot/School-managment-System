@@ -44,7 +44,7 @@ export default function SuperAdminPage() {
       <header className="flex items-center justify-between border-b border-border bg-surface px-6 py-4">
         <h1 className="text-lg font-semibold text-ink">Schools on the platform</h1>
         <button
-          onClick={() => api.adminLogout().then(() => router.replace("/super-admin/login"))}
+          onClick={() => api.adminLogout().finally(() => router.replace("/super-admin/login"))}
           className="rounded border border-border px-3 py-1.5 text-sm text-ink hover:bg-bg"
         >
           Sign out

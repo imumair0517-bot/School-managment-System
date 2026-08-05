@@ -40,7 +40,10 @@ export default function AttendancePage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.listSections().then((res) => setSections(res.sections));
+    api
+      .listSections()
+      .then((res) => setSections(res.sections))
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load sections"));
   }, []);
 
   useEffect(() => {
@@ -49,16 +52,17 @@ export default function AttendancePage() {
       return;
     }
     setSavedMessage(null);
-    Promise.all([api.listStudents({ sectionId }), api.getSectionAttendance(sectionId, date)]).then(
-      ([studentsRes, attendanceRes]) => {
+    setError(null);
+    Promise.all([api.listStudents({ sectionId }), api.getSectionAttendance(sectionId, date)])
+      .then(([studentsRes, attendanceRes]) => {
         setStudents(studentsRes.students);
         const existing: Record<string, Status> = {};
         for (const e of attendanceRes.entries) existing[e.studentId] = e.status;
         const defaults: Record<string, Status> = {};
         for (const s of studentsRes.students) defaults[s.id] = existing[s.id] ?? "present";
         setStatuses(defaults);
-      },
-    );
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load this section's roster"));
   }, [sectionId, date]);
 
   async function handleSubmit() {
@@ -109,7 +113,9 @@ export default function AttendancePage() {
         </label>
       </div>
 
-      {sectionId && students.length === 0 && <p className="mt-6 text-sm text-ink-muted">No students in this section yet.</p>}
+      {error && <p className="mt-3 text-sm text-critical">{error}</p>}
+
+      {sectionId && !error && students.length === 0 && <p className="mt-6 text-sm text-ink-muted">No students in this section yet.</p>}
 
       {students.length > 0 && (
         <>
@@ -143,7 +149,6 @@ export default function AttendancePage() {
             ))}
           </ul>
 
-          {error && <p className="mt-3 text-sm text-critical">{error}</p>}
           {savedMessage && <p className="mt-3 text-sm text-success">{savedMessage}</p>}
 
           <button

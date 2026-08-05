@@ -66,11 +66,16 @@ export default function DashboardPage() {
 
 function ParentHome() {
   const [children, setChildren] = useState<Child[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.getMyChildren().then((res) => setChildren(res.children));
+    api
+      .getMyChildren()
+      .then((res) => setChildren(res.children))
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load your children"));
   }, []);
 
+  if (error) return <p className="text-sm text-critical">{error}</p>;
   if (!children) return null;
 
   if (children.length === 0) {
@@ -112,21 +117,29 @@ function NotificationPreference() {
   const [preference, setPreference] = useState<string | null>(null);
   const [voiceAiOptOut, setVoiceAiOptOut] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.getMyPreference().then((res) => {
-      setGuardianId(res.guardianId);
-      setPreference(res.notificationChannelPreference);
-      setVoiceAiOptOut(res.voiceAiOptOut);
-    });
+    api
+      .getMyPreference()
+      .then((res) => {
+        setGuardianId(res.guardianId);
+        setPreference(res.notificationChannelPreference);
+        setVoiceAiOptOut(res.voiceAiOptOut);
+      })
+      .catch(() => setLoadError("Could not load your notification preference"));
   }, []);
 
   async function handleChange(value: string) {
     if (!guardianId) return;
     setSaving(true);
+    setSaveError(null);
     try {
       await api.updateGuardianPreference(guardianId, value);
       setPreference(value);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Could not save your preference");
     } finally {
       setSaving(false);
     }
@@ -135,14 +148,18 @@ function NotificationPreference() {
   async function handleOptOutChange(value: boolean) {
     if (!guardianId) return;
     setSaving(true);
+    setSaveError(null);
     try {
       await api.updateVoiceAiOptOut(guardianId, value);
       setVoiceAiOptOut(value);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Could not save your preference");
     } finally {
       setSaving(false);
     }
   }
 
+  if (loadError) return <p className="text-sm text-critical">{loadError}</p>;
   if (!guardianId || !preference) return null;
 
   return (
@@ -166,6 +183,7 @@ function NotificationPreference() {
           Actually, don&apos;t call me — send WhatsApp/SMS instead
         </label>
       )}
+      {saveError && <p className="mt-1 text-sm text-critical">{saveError}</p>}
     </section>
   );
 }
@@ -176,7 +194,13 @@ function VoiceAiCallsHistory() {
   );
 
   useEffect(() => {
-    api.getMyVoiceAiCalls().then((res) => setItems(res.calls));
+    // Stays quiet on failure, same as the empty case — this section
+    // already hides itself when there's nothing to show, and a failed
+    // load for a low-stakes history list isn't worth a visible banner.
+    api
+      .getMyVoiceAiCalls()
+      .then((res) => setItems(res.calls))
+      .catch(() => setItems([]));
   }, []);
 
   if (!items || items.length === 0) return null;
@@ -201,11 +225,16 @@ function VoiceAiCallsHistory() {
 
 function NotificationsHistory() {
   const [items, setItems] = useState<NotificationItem[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.getMyNotifications().then((res) => setItems(res.notifications));
+    api
+      .getMyNotifications()
+      .then((res) => setItems(res.notifications))
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load your messages"));
   }, []);
 
+  if (error) return <p className="text-sm text-critical">{error}</p>;
   if (!items) return null;
 
   return (
@@ -244,11 +273,16 @@ const INVOICE_STATUS_STYLE: Record<string, string> = {
 // see what's owed and what's been paid without visiting the office.
 function InvoicesList() {
   const [items, setItems] = useState<InvoiceItem[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.getMyInvoices().then((res) => setItems(res.invoices));
+    api
+      .getMyInvoices()
+      .then((res) => setItems(res.invoices))
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load your fees"));
   }, []);
 
+  if (error) return <p className="text-sm text-critical">{error}</p>;
   if (!items) return null;
 
   return (
@@ -283,11 +317,16 @@ function InvoicesList() {
 // filters drafts out (see /v1/report-cards/mine's own note).
 function ReportCardsList() {
   const [items, setItems] = useState<ReportCardItem[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.getMyReportCards().then((res) => setItems(res.reportCards));
+    api
+      .getMyReportCards()
+      .then((res) => setItems(res.reportCards))
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load report cards"));
   }, []);
 
+  if (error) return <p className="text-sm text-critical">{error}</p>;
   if (!items) return null;
 
   return (
@@ -320,11 +359,16 @@ function ReportCardsList() {
 
 function HomeworkList() {
   const [items, setItems] = useState<HomeworkItem[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.getMyHomework().then((res) => setItems(res.homework));
+    api
+      .getMyHomework()
+      .then((res) => setItems(res.homework))
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load homework"));
   }, []);
 
+  if (error) return <p className="text-sm text-critical">{error}</p>;
   if (!items) return null;
 
   return (
@@ -351,15 +395,22 @@ function HomeworkList() {
 
 function AttendanceHistory({ title, studentId }: { title: string; studentId: string }) {
   const [records, setRecords] = useState<AttendanceRecord[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.getStudentAttendance(studentId).then((res) => setRecords(res.attendance));
+    setError(null);
+    api
+      .getStudentAttendance(studentId)
+      .then((res) => setRecords(res.attendance))
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load attendance"));
   }, [studentId]);
 
   return (
     <section>
       <h3 className="text-sm font-semibold text-ink">{title}</h3>
-      {!records ? null : records.length === 0 ? (
+      {error ? (
+        <p className="mt-2 text-sm text-critical">{error}</p>
+      ) : !records ? null : records.length === 0 ? (
         <p className="mt-2 text-sm text-ink-muted">No attendance recorded yet.</p>
       ) : (
         <ul className="mt-2 flex flex-col divide-y divide-border rounded border border-border bg-surface">

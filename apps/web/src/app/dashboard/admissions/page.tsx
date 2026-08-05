@@ -54,9 +54,10 @@ export default function AdmissionsPage() {
   });
 
   function refresh() {
-    api.listInquiries(stageFilter || undefined).then((res) => setInquiries(res.inquiries));
-    api.listClasses().then((res) => setClasses(res.classes));
-    api.listSections().then((res) => setSections(res.sections));
+    const onLoadError = (err: unknown) => setError(err instanceof Error ? err.message : "Could not load admissions data");
+    api.listInquiries(stageFilter || undefined).then((res) => setInquiries(res.inquiries)).catch(onLoadError);
+    api.listClasses().then((res) => setClasses(res.classes)).catch(onLoadError);
+    api.listSections().then((res) => setSections(res.sections)).catch(onLoadError);
   }
   useEffect(refresh, [stageFilter]);
 

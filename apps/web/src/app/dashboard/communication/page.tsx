@@ -62,21 +62,28 @@ export default function CommunicationPage() {
   const [message, setMessage] = useState<string | null>(null);
 
   function refresh() {
-    api.listClasses().then((res) => setClasses(res.classes));
-    api.listSections().then((res) => setSections(res.sections));
-    api.listStudents().then((res) => setStudents(res.students));
-    api.listAnnouncements().then((res) => setAnnouncements(res.announcements));
-    api.listLeaveRequests().then((res) => setLeaveRequests(res.leaveRequests));
+    const onLoadError = (err: unknown) => setError(err instanceof Error ? err.message : "Could not load communication data");
+    api.listClasses().then((res) => setClasses(res.classes)).catch(onLoadError);
+    api.listSections().then((res) => setSections(res.sections)).catch(onLoadError);
+    api.listStudents().then((res) => setStudents(res.students)).catch(onLoadError);
+    api.listAnnouncements().then((res) => setAnnouncements(res.announcements)).catch(onLoadError);
+    api.listLeaveRequests().then((res) => setLeaveRequests(res.leaveRequests)).catch(onLoadError);
   }
   useEffect(refresh, []);
 
   function refreshNotifications() {
-    api.listNotifications(notificationTypeFilter || undefined).then((res) => setNotifications(res.notifications));
+    api
+      .listNotifications(notificationTypeFilter || undefined)
+      .then((res) => setNotifications(res.notifications))
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load notifications"));
   }
   useEffect(refreshNotifications, [notificationTypeFilter]);
 
   useEffect(() => {
-    api.listVoiceAiCalls().then((res) => setVoiceAiCalls(res.calls));
+    api
+      .listVoiceAiCalls()
+      .then((res) => setVoiceAiCalls(res.calls))
+      .catch(() => setVoiceAiCalls([]));
   }, []);
 
   async function submitAnnouncement(e: React.FormEvent) {

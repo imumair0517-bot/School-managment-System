@@ -38,17 +38,23 @@ export default function TimetablePage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.listSections().then((res) => setSections(res.sections));
-    api.listTimetableSlots().then((res) => setSlots(res.slots));
+    const onLoadError = (err: unknown) => setError(err instanceof Error ? err.message : "Could not load timetable setup data");
+    api.listSections().then((res) => setSections(res.sections)).catch(onLoadError);
+    api.listTimetableSlots().then((res) => setSlots(res.slots)).catch(onLoadError);
     if (canEdit) {
-      api.listSubjects().then((res) => setSubjects(res.subjects));
-      api.listTeachers().then((res) => setTeachers(res.teachers));
+      api.listSubjects().then((res) => setSubjects(res.subjects)).catch(onLoadError);
+      api.listTeachers().then((res) => setTeachers(res.teachers)).catch(onLoadError);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function refreshTimetable() {
-    if (sectionId) api.getTimetable(sectionId).then((res) => setEntries(res.entries));
+    if (sectionId) {
+      api
+        .getTimetable(sectionId)
+        .then((res) => setEntries(res.entries))
+        .catch((err) => setError(err instanceof Error ? err.message : "Could not load this section's timetable"));
+    }
   }
   useEffect(refreshTimetable, [sectionId]);
 

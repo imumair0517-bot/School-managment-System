@@ -34,12 +34,18 @@ export default function HomeworkPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.listSections().then((res) => setSections(res.sections));
-    api.listSubjects().then((res) => setSubjects(res.subjects));
+    const onLoadError = (err: unknown) => setError(err instanceof Error ? err.message : "Could not load sections/subjects");
+    api.listSections().then((res) => setSections(res.sections)).catch(onLoadError);
+    api.listSubjects().then((res) => setSubjects(res.subjects)).catch(onLoadError);
   }, []);
 
   function refreshHomework() {
-    if (sectionId) api.getSectionHomework(sectionId).then((res) => setItems(res.homework));
+    if (sectionId) {
+      api
+        .getSectionHomework(sectionId)
+        .then((res) => setItems(res.homework))
+        .catch((err) => setError(err instanceof Error ? err.message : "Could not load this section's homework"));
+    }
   }
   useEffect(refreshHomework, [sectionId]);
 
@@ -143,6 +149,8 @@ export default function HomeworkPage() {
           />
         </label>
       </div>
+
+      {mode === "none" && error && <p className="mt-3 text-sm text-critical">{error}</p>}
 
       {canStartForm && mode === "none" && (
         <div className="mt-4 flex gap-2">

@@ -37,7 +37,10 @@ export default function TeamPage() {
   const canWrite = me.permissions.users === "write";
 
   function refresh() {
-    api.listStaff().then((res) => setStaff(res.users));
+    api
+      .listStaff()
+      .then((res) => setStaff(res.users))
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load staff"));
   }
 
   useEffect(refresh, []);
@@ -57,13 +60,19 @@ export default function TeamPage() {
   }
 
   async function toggleModuleAccess(userId: string, currentlyGranted: boolean) {
-    await api.updateStaffPermissions(userId, {
-      users: currentlyGranted ? "none" : "read",
-      settings: currentlyGranted ? "none" : "read",
-    });
-    refresh();
+    setError(null);
+    try {
+      await api.updateStaffPermissions(userId, {
+        users: currentlyGranted ? "none" : "read",
+        settings: currentlyGranted ? "none" : "read",
+      });
+      refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update access");
+    }
   }
 
+  if (staff === null && error) return <p className="text-sm text-critical">{error}</p>;
   if (staff === null) return null;
 
   return (
@@ -145,6 +154,8 @@ export default function TeamPage() {
           </button>
         </form>
       )}
+
+      {error && !showForm && <p className="mt-3 text-sm text-critical">{error}</p>}
 
       <table className="mt-6 w-full border-collapse text-sm">
         <thead>

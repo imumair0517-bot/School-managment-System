@@ -25,13 +25,17 @@ export default function ReportCardsPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.listExams().then((res) => setExams(res.exams));
-    api.listSections().then((res) => setSections(res.sections));
+    const onLoadError = (err: unknown) => setError(err instanceof Error ? err.message : "Could not load exams/sections");
+    api.listExams().then((res) => setExams(res.exams)).catch(onLoadError);
+    api.listSections().then((res) => setSections(res.sections)).catch(onLoadError);
   }, []);
 
   function refreshReportCards() {
     if (examId && sectionId) {
-      api.listReportCards(examId, sectionId).then((res) => setReportCards(res.reportCards));
+      api
+        .listReportCards(examId, sectionId)
+        .then((res) => setReportCards(res.reportCards))
+        .catch((err) => setError(err instanceof Error ? err.message : "Could not load report cards"));
     } else {
       setReportCards([]);
     }
@@ -174,7 +178,10 @@ function ReportCardRow({ summary, onChanged }: { summary: ReportCardSummary; onC
   const [error, setError] = useState<string | null>(null);
 
   function load() {
-    api.getReportCard(summary.id).then((res) => setDetail(res.reportCard));
+    api
+      .getReportCard(summary.id)
+      .then((res) => setDetail(res.reportCard))
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load this report card"));
   }
   useEffect(() => {
     if (open) load();

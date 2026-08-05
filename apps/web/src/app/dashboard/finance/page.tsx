@@ -62,17 +62,21 @@ export default function FinancePage() {
   const [message, setMessage] = useState<string | null>(null);
 
   function refreshSetup() {
-    api.listAcademicSessions().then((res) => setSessions(res.sessions));
-    api.listClasses().then((res) => setClasses(res.classes));
-    api.listFeeHeads().then((res) => setFeeHeads(res.feeHeads));
-    api.listFeeStructures().then((res) => setFeeStructures(res.feeStructures));
-    api.listStudents().then((res) => setStudents(res.students));
-    api.listTags().then((res) => setTags(res.tags));
+    const onLoadError = (err: unknown) => setError(err instanceof Error ? err.message : "Could not load finance setup data");
+    api.listAcademicSessions().then((res) => setSessions(res.sessions)).catch(onLoadError);
+    api.listClasses().then((res) => setClasses(res.classes)).catch(onLoadError);
+    api.listFeeHeads().then((res) => setFeeHeads(res.feeHeads)).catch(onLoadError);
+    api.listFeeStructures().then((res) => setFeeStructures(res.feeStructures)).catch(onLoadError);
+    api.listStudents().then((res) => setStudents(res.students)).catch(onLoadError);
+    api.listTags().then((res) => setTags(res.tags)).catch(onLoadError);
   }
   useEffect(refreshSetup, []);
 
   function refreshInvoices() {
-    api.listInvoices({ status: statusFilter || undefined, overdue: overdueOnly || undefined }).then((res) => setInvoices(res.invoices));
+    api
+      .listInvoices({ status: statusFilter || undefined, overdue: overdueOnly || undefined })
+      .then((res) => setInvoices(res.invoices))
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load invoices"));
   }
   useEffect(refreshInvoices, [statusFilter, overdueOnly]);
 
@@ -537,8 +541,9 @@ function InvoiceRow({ summary, allTags, onChanged }: { summary: InvoiceSummary; 
   const [error, setError] = useState<string | null>(null);
 
   function load() {
-    api.getInvoice(summary.id).then((res) => setDetail(res.invoice));
-    api.listStudentTags(summary.studentId).then((res) => setStudentTags(res.tags));
+    const onLoadError = (err: unknown) => setError(err instanceof Error ? err.message : "Could not load invoice details");
+    api.getInvoice(summary.id).then((res) => setDetail(res.invoice)).catch(onLoadError);
+    api.listStudentTags(summary.studentId).then((res) => setStudentTags(res.tags)).catch(onLoadError);
   }
   useEffect(() => {
     if (open) load();
@@ -594,6 +599,11 @@ function InvoiceRow({ summary, allTags, onChanged }: { summary: InvoiceSummary; 
           {open ? "▲" : "▼"}
         </span>
       </button>
+      {open && !detail && error && (
+        <div className="border-t border-border p-4">
+          <p className="text-sm text-critical">{error}</p>
+        </div>
+      )}
       {open && detail && (
         <div className="border-t border-border p-4">
           <table className="w-full text-sm">

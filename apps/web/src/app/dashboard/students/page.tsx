@@ -10,9 +10,14 @@ export default function StudentsPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [guardiansByStudent, setGuardiansByStudent] = useState<Record<string, Guardian[]>>({});
+  const [guardianErrors, setGuardianErrors] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.listStudents().then((res) => setStudents(res.students));
+    api
+      .listStudents()
+      .then((res) => setStudents(res.students))
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load students"));
   }, []);
 
   async function toggleExpand(studentId: string) {
@@ -22,14 +27,19 @@ export default function StudentsPage() {
     }
     setExpandedId(studentId);
     if (!guardiansByStudent[studentId]) {
-      const res = await api.getStudent(studentId);
-      setGuardiansByStudent((prev) => ({ ...prev, [studentId]: res.guardians }));
+      try {
+        const res = await api.getStudent(studentId);
+        setGuardiansByStudent((prev) => ({ ...prev, [studentId]: res.guardians }));
+      } catch (err) {
+        setGuardianErrors((prev) => ({ ...prev, [studentId]: err instanceof Error ? err.message : "Could not load guardians" }));
+      }
     }
   }
 
   return (
     <div>
       <h2 className="text-lg font-semibold text-ink">Students</h2>
+      {error && <p className="mt-3 text-sm text-critical">{error}</p>}
 
       <table className="mt-4 w-full border-collapse text-sm">
         <thead>
@@ -58,7 +68,9 @@ export default function StudentsPage() {
                 <tr className="border-b border-border bg-surface">
                   <td colSpan={4} className="px-3 py-3">
                     <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">Guardians</p>
-                    {!guardiansByStudent[s.id] ? (
+                    {guardianErrors[s.id] ? (
+                      <p className="mt-1 text-critical">{guardianErrors[s.id]}</p>
+                    ) : !guardiansByStudent[s.id] ? (
                       <p className="mt-1 text-ink-muted">Loading…</p>
                     ) : guardiansByStudent[s.id].length === 0 ? (
                       <p className="mt-1 text-ink-muted">No guardians on file.</p>

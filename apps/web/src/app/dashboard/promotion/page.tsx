@@ -29,7 +29,10 @@ export default function PromotionPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.listSections().then((res) => setSections(res.sections));
+    api
+      .listSections()
+      .then((res) => setSections(res.sections))
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load sections"));
   }, []);
 
   useEffect(() => {
@@ -39,7 +42,11 @@ export default function PromotionPage() {
     }
     setRepeating(new Set());
     setResult(null);
-    api.listStudents({ sectionId: fromSectionId }).then((res) => setRoster(res.students));
+    setError(null);
+    api
+      .listStudents({ sectionId: fromSectionId })
+      .then((res) => setRoster(res.students))
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load this section's roster"));
   }, [fromSectionId]);
 
   function toggleRepeating(studentId: string) {
@@ -135,6 +142,8 @@ export default function PromotionPage() {
         </label>
       </div>
 
+      {error && <p className="mt-3 text-sm text-critical">{error}</p>}
+
       {fromSectionId && roster.length > 0 && (
         <>
           <h3 className="mt-6 text-sm font-semibold text-ink">Roster — check anyone repeating this class</h3>
@@ -170,8 +179,6 @@ export default function PromotionPage() {
             </label>
           )}
 
-          {error && <p className="mt-3 text-sm text-critical">{error}</p>}
-
           <button
             onClick={handlePromote}
             disabled={busy || !toSectionId || (repeating.size > 0 && !repeatSectionId)}
@@ -181,7 +188,7 @@ export default function PromotionPage() {
           </button>
         </>
       )}
-      {fromSectionId && roster.length === 0 && <p className="mt-4 text-sm text-ink-muted">This section has no active students.</p>}
+      {fromSectionId && !error && roster.length === 0 && <p className="mt-4 text-sm text-ink-muted">This section has no active students.</p>}
 
       {result && (
         <p className="mt-4 text-sm text-success">

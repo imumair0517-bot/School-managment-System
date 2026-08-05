@@ -72,7 +72,7 @@ function Shell({ children }: { children: React.ReactNode }) {
               {me.user.fullName} · {me.user.role.replace("_", " ")}
             </span>
             <button
-              onClick={() => api.logout().then(() => router.replace("/login"))}
+              onClick={() => api.logout().finally(() => router.replace("/login"))}
               className="rounded border border-border px-3 py-1.5 text-sm text-ink hover:bg-bg"
             >
               Sign out

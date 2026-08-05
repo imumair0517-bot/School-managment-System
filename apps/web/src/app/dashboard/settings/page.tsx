@@ -26,12 +26,18 @@ export default function SettingsPage() {
     // standard fix: the first invocation's cleanup flips it false before
     // its response ever lands.
     let active = true;
-    api.getSettings().then((res) => {
-      if (!active) return;
-      setLogoUrl(res.brandingLogoUrl ?? "");
-      setColor(res.brandingPrimaryColor ?? "#1F6F5C");
-      setLoaded(true);
-    });
+    api
+      .getSettings()
+      .then((res) => {
+        if (!active) return;
+        setLogoUrl(res.brandingLogoUrl ?? "");
+        setColor(res.brandingPrimaryColor ?? "#1F6F5C");
+        setLoaded(true);
+      })
+      .catch((err) => {
+        if (!active) return;
+        setError(err instanceof Error ? err.message : "Could not load settings");
+      });
     return () => {
       active = false;
     };

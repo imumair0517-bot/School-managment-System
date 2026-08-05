@@ -39,21 +39,31 @@ export default function ExamsPage() {
   const [subjectForm, setSubjectForm] = useState({ subjectId: "", classId: "", totalMarks: "100", passingMarks: "40" });
 
   function refreshTop() {
-    api.listAcademicSessions().then((res) => setSessions(res.sessions));
-    api.listClasses().then((res) => setClasses(res.classes));
-    api.listSections().then((res) => setSections(res.sections));
-    api.listSubjects().then((res) => setSubjects(res.subjects));
-    api.listExams().then((res) => {
-      setExams(res.exams);
-      const current = res.exams.find((e: Exam) => e.id === examId);
-      if (!current && res.exams.length > 0) setExamId((prev) => prev || res.exams[0].id);
-    });
+    const onLoadError = (err: unknown) => setError(err instanceof Error ? err.message : "Could not load exam setup data");
+    api.listAcademicSessions().then((res) => setSessions(res.sessions)).catch(onLoadError);
+    api.listClasses().then((res) => setClasses(res.classes)).catch(onLoadError);
+    api.listSections().then((res) => setSections(res.sections)).catch(onLoadError);
+    api.listSubjects().then((res) => setSubjects(res.subjects)).catch(onLoadError);
+    api
+      .listExams()
+      .then((res) => {
+        setExams(res.exams);
+        const current = res.exams.find((e: Exam) => e.id === examId);
+        if (!current && res.exams.length > 0) setExamId((prev) => prev || res.exams[0].id);
+      })
+      .catch(onLoadError);
   }
   useEffect(refreshTop, []);
 
   function refreshExamSubjects() {
-    if (examId) api.listExamSubjects(examId).then((res) => setExamSubjects(res.examSubjects));
-    else setExamSubjects([]);
+    if (examId) {
+      api
+        .listExamSubjects(examId)
+        .then((res) => setExamSubjects(res.examSubjects))
+        .catch((err) => setError(err instanceof Error ? err.message : "Could not load this exam's subjects"));
+    } else {
+      setExamSubjects([]);
+    }
   }
   useEffect(refreshExamSubjects, [examId]);
 
@@ -253,17 +263,19 @@ function MarksGrid({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([api.listStudents({ sectionId }), api.getMarks(examSubjectId)]).then(([studentsRes, marksRes]) => {
-      setStudents(studentsRes.students);
-      const existing: Record<string, string> = {};
-      let anySubmitted = false;
-      for (const e of marksRes.entries as MarksEntry[]) {
-        existing[e.studentId] = String(e.marksObtained);
-        if (e.submitted) anySubmitted = true;
-      }
-      setEntries(existing);
-      setSubmitted(anySubmitted && marksRes.entries.length > 0);
-    });
+    Promise.all([api.listStudents({ sectionId }), api.getMarks(examSubjectId)])
+      .then(([studentsRes, marksRes]) => {
+        setStudents(studentsRes.students);
+        const existing: Record<string, string> = {};
+        let anySubmitted = false;
+        for (const e of marksRes.entries as MarksEntry[]) {
+          existing[e.studentId] = String(e.marksObtained);
+          if (e.submitted) anySubmitted = true;
+        }
+        setEntries(existing);
+        setSubmitted(anySubmitted && marksRes.entries.length > 0);
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load this section's marks"));
   }, [examSubjectId, sectionId]);
 
   async function handleSave() {
@@ -308,6 +320,14 @@ function MarksGrid({
     }
   }
 
+  if (error && students.length === 0) {
+    return (
+      <div className="mt-3 first:mt-0">
+        <h4 className="text-sm font-medium text-ink">{sectionName}</h4>
+        <p className="mt-1 text-sm text-critical">{error}</p>
+      </div>
+    );
+  }
   if (students.length === 0) return null;
 
   return (
