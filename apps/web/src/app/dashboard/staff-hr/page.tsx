@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api-client";
+import { useMe } from "@/lib/me-context";
 
 type StaffMember = { id: string; fullName: string; role: string };
 type LeaveType = { id: string; name: string; annualQuotaDays: number };
@@ -49,6 +50,7 @@ function today() {
 // tool, so the default view leaves everyone unmarked rather than
 // defaulting to "present" the way the class grid does.
 export default function StaffHrPage() {
+  const me = useMe();
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [date, setDate] = useState(today());
   const [attendanceByStaff, setAttendanceByStaff] = useState<Record<string, string>>({});
@@ -230,6 +232,363 @@ export default function StaffHrPage() {
           </button>
         </form>
       </section>
+
+      {me.permissions.payroll !== "none" && <PayrollSection staff={staff} />}
     </div>
+  );
+}
+
+type SalaryStructure = { staffUserId: string; staffName: string | null; basicSalary: number; allowances: number; effectiveFrom: string };
+type LoanEntry = { id: string; entryType: "loan" | "repayment"; amount: number; note: string | null; createdAt: string };
+type Payslip = {
+  id: string;
+  staffUserId: string;
+  staffName: string | null;
+  billingPeriod: string;
+  basicSalary: number;
+  allowances: number;
+  lwpDays: number;
+  lwpDeduction: number;
+  loanDeduction: number;
+  netPay: number;
+  status: string;
+};
+
+const PAYSLIP_STATUS_STYLE: Record<string, string> = {
+  draft: "bg-warning-soft text-warning",
+  finalized: "bg-success-soft text-success",
+};
+
+// Milestone 14 (Phase 2 §F) — salary structures, an advance/loan ledger,
+// and payslip generation, gated separately from the rest of this page by
+// "payroll" permission (compensation data is more sensitive than "who
+// took leave when" — see the permissions package comment).
+function PayrollSection({ staff }: { staff: StaffMember[] }) {
+  const [structures, setStructures] = useState<SalaryStructure[]>([]);
+  const [structureForm, setStructureForm] = useState({ staffUserId: "", basicSalary: "", allowances: "0", effectiveFrom: today() });
+
+  const [ledgerStaffId, setLedgerStaffId] = useState("");
+  const [ledger, setLedger] = useState<{ entries: LoanEntry[]; outstandingBalance: number } | null>(null);
+  const [loanForm, setLoanForm] = useState({ entryType: "loan" as "loan" | "repayment", amount: "", note: "" });
+
+  const [genForm, setGenForm] = useState({ billingPeriod: "", startDate: "", endDate: "" });
+  const [genResult, setGenResult] = useState<{ generated: number; skipped: { staffName: string; reason: string }[] } | null>(null);
+  const [payslipFilter, setPayslipFilter] = useState("");
+  const [payslips, setPayslips] = useState<Payslip[]>([]);
+
+  const [error, setError] = useState<string | null>(null);
+
+  function refreshStructures() {
+    api
+      .listSalaryStructures()
+      .then((res) => setStructures(res.salaryStructures))
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load salary structures"));
+  }
+  useEffect(refreshStructures, []);
+
+  function refreshLedger() {
+    if (!ledgerStaffId) {
+      setLedger(null);
+      return;
+    }
+    api
+      .getStaffLoanLedger(ledgerStaffId)
+      .then(setLedger)
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load this staff member's loan ledger"));
+  }
+  useEffect(refreshLedger, [ledgerStaffId]);
+
+  function refreshPayslips() {
+    api
+      .listPayslips(payslipFilter || undefined)
+      .then((res) => setPayslips(res.payslips))
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load payslips"));
+  }
+  useEffect(refreshPayslips, [payslipFilter]);
+
+  async function submitStructure(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    try {
+      await api.upsertSalaryStructure({
+        staffUserId: structureForm.staffUserId,
+        basicSalary: Number(structureForm.basicSalary),
+        allowances: Number(structureForm.allowances),
+        effectiveFrom: structureForm.effectiveFrom,
+      });
+      setStructureForm({ staffUserId: "", basicSalary: "", allowances: "0", effectiveFrom: today() });
+      refreshStructures();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save salary structure");
+    }
+  }
+
+  async function submitLoanEntry(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    try {
+      await api.createLoanEntry({ staffUserId: ledgerStaffId, entryType: loanForm.entryType, amount: Number(loanForm.amount), note: loanForm.note || undefined });
+      setLoanForm({ entryType: "loan", amount: "", note: "" });
+      refreshLedger();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not record this entry");
+    }
+  }
+
+  async function submitGenerate(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setGenResult(null);
+    try {
+      const res = await api.generatePayslips(genForm);
+      setGenResult({ generated: res.generated, skipped: res.skipped });
+      setPayslipFilter(genForm.billingPeriod);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not generate payslips");
+    }
+  }
+
+  async function finalize(payslipId: string) {
+    setError(null);
+    try {
+      await api.finalizePayslip(payslipId);
+      refreshPayslips();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not finalize this payslip");
+    }
+  }
+
+  return (
+    <>
+      <section>
+        <h2 className="text-lg font-semibold text-ink">Payroll</h2>
+        {error && <p className="mt-2 text-sm text-critical">{error}</p>}
+      </section>
+
+      <section>
+        <h3 className="text-sm font-semibold text-ink">Salary Structures</h3>
+        <ul className="mt-2 flex flex-col divide-y divide-border rounded border border-border bg-surface">
+          {structures.map((s) => (
+            <li key={s.staffUserId} className="flex items-center justify-between px-4 py-2 text-sm">
+              <span className="text-ink">{s.staffName}</span>
+              <span className="text-ink-muted">
+                Rs. {s.basicSalary} + {s.allowances} allowances, effective {s.effectiveFrom}
+              </span>
+            </li>
+          ))}
+        </ul>
+        {structures.length === 0 && <p className="mt-2 text-sm text-ink-muted">No salary structures set up yet.</p>}
+
+        <form onSubmit={submitStructure} className="mt-3 flex flex-wrap items-end gap-3 rounded border border-border bg-surface p-4">
+          <label className="flex flex-col gap-1 text-sm text-ink">
+            Staff
+            <select
+              value={structureForm.staffUserId}
+              onChange={(e) => setStructureForm({ ...structureForm, staffUserId: e.target.value })}
+              className="rounded border border-border bg-bg px-3 py-2 text-ink outline-none focus:border-accent"
+            >
+              <option value="">Choose a staff member…</option>
+              {staff.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.fullName}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-ink">
+            Basic salary (Rs.)
+            <input
+              type="number"
+              value={structureForm.basicSalary}
+              onChange={(e) => setStructureForm({ ...structureForm, basicSalary: e.target.value })}
+              className="w-28 rounded border border-border bg-bg px-3 py-2 text-ink outline-none focus:border-accent"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-ink">
+            Allowances (Rs.)
+            <input
+              type="number"
+              value={structureForm.allowances}
+              onChange={(e) => setStructureForm({ ...structureForm, allowances: e.target.value })}
+              className="w-28 rounded border border-border bg-bg px-3 py-2 text-ink outline-none focus:border-accent"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-ink">
+            Effective from
+            <input
+              type="date"
+              value={structureForm.effectiveFrom}
+              onChange={(e) => setStructureForm({ ...structureForm, effectiveFrom: e.target.value })}
+              className="rounded border border-border bg-bg px-3 py-2 text-ink outline-none focus:border-accent"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={!structureForm.staffUserId || !structureForm.basicSalary}
+            className="rounded bg-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+          >
+            Save
+          </button>
+        </form>
+      </section>
+
+      <section>
+        <h3 className="text-sm font-semibold text-ink">Loans & Advances</h3>
+        <label className="mt-2 flex w-fit flex-col gap-1 text-sm text-ink">
+          Staff
+          <select
+            value={ledgerStaffId}
+            onChange={(e) => setLedgerStaffId(e.target.value)}
+            className="rounded border border-border bg-bg px-3 py-2 text-ink outline-none focus:border-accent"
+          >
+            <option value="">Choose a staff member…</option>
+            {staff.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.fullName}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {ledgerStaffId && ledger && (
+          <>
+            <p className="mt-2 text-sm text-ink">
+              Outstanding balance: <span className="font-medium">Rs. {ledger.outstandingBalance}</span>
+            </p>
+            <ul className="mt-2 flex flex-col divide-y divide-border rounded border border-border bg-surface">
+              {ledger.entries.map((e) => (
+                <li key={e.id} className="flex items-center justify-between px-4 py-2 text-sm">
+                  <span className="text-ink">
+                    {e.entryType === "loan" ? "Loan given" : "Repayment"} — Rs. {e.amount}
+                    {e.note ? ` (${e.note})` : ""}
+                  </span>
+                  <span className="text-ink-muted">{new Date(e.createdAt).toLocaleDateString()}</span>
+                </li>
+              ))}
+            </ul>
+            {ledger.entries.length === 0 && <p className="mt-2 text-sm text-ink-muted">No loan activity yet.</p>}
+
+            <form onSubmit={submitLoanEntry} className="mt-3 flex flex-wrap items-end gap-3">
+              <label className="flex flex-col gap-1 text-sm text-ink">
+                Type
+                <select
+                  value={loanForm.entryType}
+                  onChange={(e) => setLoanForm({ ...loanForm, entryType: e.target.value as "loan" | "repayment" })}
+                  className="rounded border border-border bg-bg px-3 py-2 text-ink outline-none focus:border-accent"
+                >
+                  <option value="loan">Loan given</option>
+                  <option value="repayment">Repayment</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-sm text-ink">
+                Amount (Rs.)
+                <input
+                  type="number"
+                  value={loanForm.amount}
+                  onChange={(e) => setLoanForm({ ...loanForm, amount: e.target.value })}
+                  className="w-28 rounded border border-border bg-bg px-3 py-2 text-ink outline-none focus:border-accent"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm text-ink">
+                Note
+                <input
+                  value={loanForm.note}
+                  onChange={(e) => setLoanForm({ ...loanForm, note: e.target.value })}
+                  className="rounded border border-border bg-bg px-3 py-2 text-ink outline-none focus:border-accent"
+                />
+              </label>
+              <button
+                type="submit"
+                disabled={!loanForm.amount}
+                className="rounded bg-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+              >
+                Record
+              </button>
+            </form>
+          </>
+        )}
+      </section>
+
+      <section>
+        <h3 className="text-sm font-semibold text-ink">Generate Payslips</h3>
+        <form onSubmit={submitGenerate} className="mt-2 flex flex-wrap items-end gap-3 rounded border border-border bg-surface p-4">
+          <label className="flex flex-col gap-1 text-sm text-ink">
+            Billing period
+            <input
+              value={genForm.billingPeriod}
+              onChange={(e) => setGenForm({ ...genForm, billingPeriod: e.target.value })}
+              placeholder="e.g. August 2026"
+              className="rounded border border-border bg-bg px-3 py-2 text-ink outline-none focus:border-accent"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-ink">
+            Period start
+            <input
+              type="date"
+              value={genForm.startDate}
+              onChange={(e) => setGenForm({ ...genForm, startDate: e.target.value })}
+              className="rounded border border-border bg-bg px-3 py-2 text-ink outline-none focus:border-accent"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-ink">
+            Period end
+            <input
+              type="date"
+              value={genForm.endDate}
+              onChange={(e) => setGenForm({ ...genForm, endDate: e.target.value })}
+              className="rounded border border-border bg-bg px-3 py-2 text-ink outline-none focus:border-accent"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={!genForm.billingPeriod.trim() || !genForm.startDate || !genForm.endDate}
+            className="rounded bg-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+          >
+            Generate payslips
+          </button>
+        </form>
+        {genResult && (
+          <p className="mt-2 text-sm text-success">
+            Generated {genResult.generated} payslip(s).
+            {genResult.skipped.length > 0 && ` Skipped ${genResult.skipped.length}: ${genResult.skipped.map((s) => `${s.staffName} (${s.reason.replace(/_/g, " ")})`).join(", ")}.`}
+          </p>
+        )}
+      </section>
+
+      <section>
+        <h3 className="text-sm font-semibold text-ink">Payslips</h3>
+        <label className="mt-2 flex w-fit flex-col gap-1 text-sm text-ink">
+          Filter by billing period
+          <input
+            value={payslipFilter}
+            onChange={(e) => setPayslipFilter(e.target.value)}
+            placeholder="e.g. August 2026 (blank = all)"
+            className="rounded border border-border bg-bg px-3 py-2 text-ink outline-none focus:border-accent"
+          />
+        </label>
+        <ul className="mt-3 flex flex-col gap-2">
+          {payslips.map((p) => (
+            <li key={p.id} className="rounded border border-border bg-surface p-3 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-ink">
+                  {p.staffName} — {p.billingPeriod}
+                </span>
+                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${PAYSLIP_STATUS_STYLE[p.status] ?? ""}`}>{p.status}</span>
+              </div>
+              <p className="mt-1 text-ink-muted">
+                Basic Rs. {p.basicSalary} + {p.allowances} allowances − {p.lwpDeduction} LWP ({p.lwpDays} days) − {p.loanDeduction} loan ={" "}
+                <span className="font-medium text-ink">Net Rs. {p.netPay}</span>
+              </p>
+              {p.status === "draft" && (
+                <button onClick={() => finalize(p.id)} className="mt-2 text-sm text-accent underline">
+                  Finalize
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+        {payslips.length === 0 && <p className="mt-2 text-sm text-ink-muted">No payslips generated yet.</p>}
+      </section>
+    </>
   );
 }

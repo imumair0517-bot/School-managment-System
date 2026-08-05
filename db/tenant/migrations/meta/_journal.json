@@ -78,6 +78,13 @@
       "when": 1785956958400,
       "tag": "0010_plain_spectrum",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1785957496686,
+      "tag": "0011_flawless_meteorite",
+      "breakpoints": true
     }
   ]
 }

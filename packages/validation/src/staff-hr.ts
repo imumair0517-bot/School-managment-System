@@ -52,7 +52,12 @@ export const createLoanEntrySchema = z.object({
 });
 export type CreateLoanEntryInput = z.infer<typeof createLoanEntrySchema>;
 
+// startDate/endDate is the actual pay-period date range LWP days are
+// counted over; billingPeriod stays a free-text label (same split as
+// finance's invoices: a display label plus real dates to compute from).
 export const generatePayslipsSchema = z.object({
   billingPeriod: z.string().min(2).max(40),
+  startDate: z.string().date(),
+  endDate: z.string().date(),
 });
 export type GeneratePayslipsInput = z.infer<typeof generatePayslipsSchema>;

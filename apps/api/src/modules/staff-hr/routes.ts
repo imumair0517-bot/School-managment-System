@@ -1,7 +1,15 @@
 import type { FastifyInstance } from "fastify";
-import { eq, and, gte, lte, desc } from "drizzle-orm";
-import { staffAttendance, staffLeaveTypes, staffLeaveRequests, users } from "@school-os/db-tenant";
-import { markStaffAttendanceSchema, createLeaveTypeSchema, createStaffLeaveRequestSchema, decideStaffLeaveRequestSchema } from "@school-os/validation";
+import { eq, and, gte, lte, desc, isNull, inArray } from "drizzle-orm";
+import { staffAttendance, staffLeaveTypes, staffLeaveRequests, staffSalaryStructures, staffLoanLedger, payslips, users } from "@school-os/db-tenant";
+import {
+  markStaffAttendanceSchema,
+  createLeaveTypeSchema,
+  createStaffLeaveRequestSchema,
+  decideStaffLeaveRequestSchema,
+  upsertSalaryStructureSchema,
+  createLoanEntrySchema,
+  generatePayslipsSchema,
+} from "@school-os/validation";
 import { getTenantDbConnection } from "../../db/tenant-registry.js";
 import { tenantResolutionMiddleware } from "../../middleware/tenant-resolution.js";
 import { requireAuth } from "../../middleware/auth.js";
@@ -240,13 +248,253 @@ export async function staffHrRoutes(app: FastifyInstance) {
 
     return reply.send({ leaveRequest: row });
   });
+
+  // --- Milestone 14: Payroll ---
+  //
+  // Salary-structure and loan-entry writes are further restricted beyond
+  // "payroll" write to School Owner/Principal/HR specifically (Phase 3
+  // A4's role-template intent — a Principal with a payroll override
+  // shouldn't need to also be HR to set someone's pay), the same
+  // "[SO/PR]"-narrower-than-module-write pattern finance.ts uses for fee
+  // policy.
+  const PAYROLL_ROLES = new Set(["school_owner", "principal", "hr"]);
+  function requirePayrollRole(req: { authUser?: { role: string } }, reply: { code: (n: number) => { send: (b: unknown) => unknown } }) {
+    if (!PAYROLL_ROLES.has(req.authUser!.role)) {
+      reply.code(403).send({ error: { code: "forbidden", message: "Only the School Owner, Principal, or HR can manage payroll" } });
+      return false;
+    }
+    return true;
+  }
+
+  app.post("/v1/payroll/salary-structures", { preHandler: [...auth, requirePermission("payroll", "write")] }, async (req, reply) => {
+    if (!requirePayrollRole(req, reply)) return;
+    const parsed = upsertSalaryStructureSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: { code: "invalid_input", message: parsed.error.issues[0]?.message ?? "Invalid input" } });
+    }
+    const tenant = req.tenant!;
+    const db = await getTenantDbConnection(tenant.id);
+
+    const existing = await db.select().from(staffSalaryStructures).where(eq(staffSalaryStructures.staffUserId, parsed.data.staffUserId));
+    let row;
+    if (existing[0]) {
+      [row] = await db
+        .update(staffSalaryStructures)
+        .set({ basicSalary: parsed.data.basicSalary, allowances: parsed.data.allowances, effectiveFrom: parsed.data.effectiveFrom, updatedAt: new Date() })
+        .where(eq(staffSalaryStructures.id, existing[0].id))
+        .returning();
+    } else {
+      [row] = await db.insert(staffSalaryStructures).values(parsed.data).returning();
+    }
+
+    await logAuditEvent(tenant.id, {
+      actorUserId: req.authUser!.sub,
+      action: "staff_salary_structure.set",
+      entityType: "staff_salary_structure",
+      entityId: row!.id,
+      detail: { staffUserId: parsed.data.staffUserId, basicSalary: parsed.data.basicSalary },
+    });
+
+    return reply.send({ salaryStructure: row });
+  });
+
+  app.get("/v1/payroll/salary-structures", { preHandler: [...auth, requirePermission("payroll", "read")] }, async (req, reply) => {
+    const db = await getTenantDbConnection(req.tenant!.id);
+    const [rows, staff] = await Promise.all([db.select().from(staffSalaryStructures), db.select().from(users)]);
+    const staffById = new Map(staff.map((u) => [u.id, u]));
+    return reply.send({
+      salaryStructures: rows.map((r) => ({
+        staffUserId: r.staffUserId,
+        staffName: staffById.get(r.staffUserId)?.fullName ?? null,
+        basicSalary: r.basicSalary,
+        allowances: r.allowances,
+        effectiveFrom: r.effectiveFrom,
+      })),
+    });
+  });
+
+  app.post("/v1/payroll/loan-entries", { preHandler: [...auth, requirePermission("payroll", "write")] }, async (req, reply) => {
+    if (!requirePayrollRole(req, reply)) return;
+    const parsed = createLoanEntrySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: { code: "invalid_input", message: parsed.error.issues[0]?.message ?? "Invalid input" } });
+    }
+    const tenant = req.tenant!;
+    const db = await getTenantDbConnection(tenant.id);
+    const [row] = await db.insert(staffLoanLedger).values({ ...parsed.data, recordedBy: req.authUser!.sub }).returning();
+
+    await logAuditEvent(tenant.id, {
+      actorUserId: req.authUser!.sub,
+      action: "staff_loan_entry.recorded",
+      entityType: "staff_loan_ledger",
+      entityId: row!.id,
+      detail: { staffUserId: parsed.data.staffUserId, entryType: parsed.data.entryType, amount: parsed.data.amount },
+    });
+
+    return reply.code(201).send({ loanEntry: row });
+  });
+
+  // Running ledger + derived outstanding balance (loans minus repayments)
+  // for one staff member — the balance is summed here, never stored, the
+  // same "derive from the transaction history" rule invoices/payments
+  // already follow elsewhere in this codebase.
+  app.get("/v1/staff/:staffUserId/loan-ledger", { preHandler: [...auth, requirePermission("payroll", "read")] }, async (req, reply) => {
+    const { staffUserId } = req.params as { staffUserId: string };
+    const db = await getTenantDbConnection(req.tenant!.id);
+    const rows = await db.select().from(staffLoanLedger).where(eq(staffLoanLedger.staffUserId, staffUserId)).orderBy(desc(staffLoanLedger.createdAt));
+    const outstandingBalance = rows.reduce((sum, r) => sum + (r.entryType === "loan" ? r.amount : -r.amount), 0);
+    return reply.send({ entries: rows, outstandingBalance });
+  });
+
+  // Generates one draft payslip per staff member who has a salary
+  // structure and no existing payslip for this exact billingPeriod yet
+  // (Phase 3 C1's "without re-entry each cycle" precedent, applied here:
+  // re-running this for the same period is a no-op for anyone already
+  // generated, same shape as generateInvoices's skip list).
+  app.post("/v1/payroll/payslips/generate", { preHandler: [...auth, requirePermission("payroll", "write")] }, async (req, reply) => {
+    if (!requirePayrollRole(req, reply)) return;
+    const parsed = generatePayslipsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: { code: "invalid_input", message: parsed.error.issues[0]?.message ?? "Invalid input" } });
+    }
+    const { billingPeriod, startDate, endDate } = parsed.data;
+    const tenant = req.tenant!;
+    const db = await getTenantDbConnection(tenant.id);
+
+    const [structures, existingPayslips, staff] = await Promise.all([
+      db.select().from(staffSalaryStructures),
+      db.select().from(payslips).where(eq(payslips.billingPeriod, billingPeriod)),
+      db.select().from(users),
+    ]);
+    const alreadyGenerated = new Set(existingPayslips.map((p) => p.staffUserId));
+    const staffById = new Map(staff.map((u) => [u.id, u]));
+
+    const created: (typeof payslips.$inferSelect)[] = [];
+    const skipped: { staffUserId: string; staffName: string; reason: string }[] = [];
+
+    for (const structure of structures) {
+      const name = staffById.get(structure.staffUserId)?.fullName ?? structure.staffUserId;
+      if (alreadyGenerated.has(structure.staffUserId)) {
+        skipped.push({ staffUserId: structure.staffUserId, staffName: name, reason: "already_generated_this_period" });
+        continue;
+      }
+
+      const lwpDays = await countUnpaidAbsenceDays(tenant.id, structure.staffUserId, startDate, endDate);
+      // Fixed 30-day-month convention for the per-day rate — standard
+      // practice for Pakistani monthly-salaried staff payroll, and simple
+      // enough not to need a calendar-days-in-month lookup.
+      const perDayRate = Math.round(structure.basicSalary / 30);
+      const lwpDeduction = perDayRate * lwpDays;
+
+      // Any repayment HR has logged since the *last* payslip that swept
+      // one up, regardless of when it was recorded — not a date-range
+      // match against the pay period, since HR records a repayment
+      // whenever it happens, not necessarily inside the exact window
+      // being processed. "not yet applied to a payslip" is the real
+      // signal (see the schema comment on appliedToPayslipId).
+      const unappliedRepayments = await db
+        .select()
+        .from(staffLoanLedger)
+        .where(
+          and(
+            eq(staffLoanLedger.staffUserId, structure.staffUserId),
+            eq(staffLoanLedger.entryType, "repayment"),
+            isNull(staffLoanLedger.appliedToPayslipId),
+          ),
+        );
+      const loanDeduction = unappliedRepayments.reduce((sum, e) => sum + e.amount, 0);
+
+      const netPay = structure.basicSalary + structure.allowances - lwpDeduction - loanDeduction;
+
+      const [row] = await db
+        .insert(payslips)
+        .values({
+          staffUserId: structure.staffUserId,
+          billingPeriod,
+          basicSalary: structure.basicSalary,
+          allowances: structure.allowances,
+          lwpDays,
+          lwpDeduction,
+          loanDeduction,
+          netPay,
+          generatedBy: req.authUser!.sub,
+        })
+        .returning();
+      created.push(row!);
+
+      if (unappliedRepayments.length > 0) {
+        await db
+          .update(staffLoanLedger)
+          .set({ appliedToPayslipId: row!.id })
+          .where(
+            inArray(
+              staffLoanLedger.id,
+              unappliedRepayments.map((e) => e.id),
+            ),
+          );
+      }
+    }
+
+    await logAuditEvent(tenant.id, {
+      actorUserId: req.authUser!.sub,
+      action: "payslips.generated",
+      entityType: "payslip",
+      detail: { billingPeriod, generated: created.length, skipped: skipped.length },
+    });
+
+    return reply.send({ generated: created.length, skipped, payslips: created });
+  });
+
+  app.get("/v1/payroll/payslips", { preHandler: [...auth, requirePermission("payroll", "read")] }, async (req, reply) => {
+    const { billingPeriod } = req.query as { billingPeriod?: string };
+    const db = await getTenantDbConnection(req.tenant!.id);
+    const [rows, staff] = await Promise.all([
+      billingPeriod ? db.select().from(payslips).where(eq(payslips.billingPeriod, billingPeriod)) : db.select().from(payslips),
+      db.select().from(users),
+    ]);
+    const staffById = new Map(staff.map((u) => [u.id, u]));
+    return reply.send({
+      payslips: rows
+        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+        .map((p) => ({ ...p, staffName: staffById.get(p.staffUserId)?.fullName ?? null })),
+    });
+  });
+
+  app.post("/v1/payroll/payslips/:payslipId/finalize", { preHandler: [...auth, requirePermission("payroll", "write")] }, async (req, reply) => {
+    if (!requirePayrollRole(req, reply)) return;
+    const { payslipId } = req.params as { payslipId: string };
+    const tenant = req.tenant!;
+    const db = await getTenantDbConnection(tenant.id);
+
+    const existing = await db.select().from(payslips).where(eq(payslips.id, payslipId));
+    if (!existing[0]) return reply.code(404).send({ error: { code: "not_found", message: "No such payslip" } });
+
+    const [row] = await db.update(payslips).set({ status: "finalized" }).where(eq(payslips.id, payslipId)).returning();
+    await logAuditEvent(tenant.id, { actorUserId: req.authUser!.sub, action: "payslip.finalized", entityType: "payslip", entityId: payslipId });
+    return reply.send({ payslip: row });
+  });
+
+  // Self-scoped: a staff member sees their own payslip history, no
+  // "payroll" permission needed — same self-scoped shape as every other
+  // /v1/me/... endpoint in this file.
+  app.get("/v1/me/payslips", { preHandler: auth }, async (req, reply) => {
+    const db = await getTenantDbConnection(req.tenant!.id);
+    const rows = await db
+      .select()
+      .from(payslips)
+      .where(eq(payslips.staffUserId, req.authUser!.sub))
+      .orderBy(desc(payslips.createdAt));
+    return reply.send({ payslips: rows });
+  });
 }
 
-// Exported for Milestone 14's payroll module — leave-without-pay days for
-// a billing period are computed from this same attendance table (status
-// 'absent' with no covering approved leave, same "was there an approved
-// leave request that explains this" check attendance.ts's absence-alert
-// logic already uses for students).
+// Exported for Milestone 14's payroll module above — leave-without-pay
+// days for a pay period are counted from this same attendance table.
+// staff_attendance's own status enum already distinguishes 'leave' from
+// 'absent' (unlike the student model, which needs a separate
+// leave_requests lookup), so counting 'absent' rows here is already the
+// right thing — no covering-leave check needed the way attendance.ts's
+// student absence-alert logic requires one.
 export async function countUnpaidAbsenceDays(tenantId: string, staffUserId: string, startDate: string, endDate: string) {
   const db = await getTenantDbConnection(tenantId);
   const rows = await db

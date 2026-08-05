@@ -236,4 +236,17 @@ export const api = {
   listStaffLeaveRequests: (status?: string) => apiFetch(`/v1/staff-leave-requests${status ? `?status=${status}` : ""}`),
   decideStaffLeaveRequest: (leaveRequestId: string, status: "approved" | "rejected") =>
     apiFetch(`/v1/staff-leave-requests/${leaveRequestId}/decide`, { method: "POST", body: JSON.stringify({ status }) }),
+
+  // Payroll (Milestone 14, Phase 2 §F)
+  upsertSalaryStructure: (input: { staffUserId: string; basicSalary: number; allowances: number; effectiveFrom: string }) =>
+    apiFetch("/v1/payroll/salary-structures", { method: "POST", body: JSON.stringify(input) }),
+  listSalaryStructures: () => apiFetch("/v1/payroll/salary-structures"),
+  createLoanEntry: (input: { staffUserId: string; entryType: "loan" | "repayment"; amount: number; note?: string }) =>
+    apiFetch("/v1/payroll/loan-entries", { method: "POST", body: JSON.stringify(input) }),
+  getStaffLoanLedger: (staffUserId: string) => apiFetch(`/v1/staff/${staffUserId}/loan-ledger`),
+  generatePayslips: (input: { billingPeriod: string; startDate: string; endDate: string }) =>
+    apiFetch("/v1/payroll/payslips/generate", { method: "POST", body: JSON.stringify(input) }),
+  listPayslips: (billingPeriod?: string) => apiFetch(`/v1/payroll/payslips${billingPeriod ? `?billingPeriod=${encodeURIComponent(billingPeriod)}` : ""}`),
+  finalizePayslip: (payslipId: string) => apiFetch(`/v1/payroll/payslips/${payslipId}/finalize`, { method: "POST" }),
+  getMyPayslips: () => apiFetch("/v1/me/payslips"),
 };

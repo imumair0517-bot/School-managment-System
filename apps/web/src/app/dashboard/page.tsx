@@ -55,6 +55,7 @@ export default function DashboardPage() {
       </p>
 
       <MyStaffLeave />
+      <MyPayslips />
 
       <div className="mt-8 rounded border border-dashed border-border p-8 text-center text-ink-muted">
         Everything through Milestone 10 (Phase 13) is live — Admissions,
@@ -237,6 +238,61 @@ function MyStaffLeave() {
           </ul>
         </div>
       )}
+    </div>
+  );
+}
+
+type MyPayslip = {
+  id: string;
+  billingPeriod: string;
+  basicSalary: number;
+  allowances: number;
+  lwpDays: number;
+  lwpDeduction: number;
+  loanDeduction: number;
+  netPay: number;
+  status: string;
+};
+
+const PAYSLIP_STATUS_STYLE: Record<string, string> = {
+  draft: "bg-warning-soft text-warning",
+  finalized: "bg-success-soft text-success",
+};
+
+// Milestone 14's self-service counterpart to MyStaffLeave above — a staff
+// member's own payslip history, self-scoped via GET /v1/me/payslips, no
+// "payroll" permission required.
+function MyPayslips() {
+  const [payslips, setPayslips] = useState<MyPayslip[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .getMyPayslips()
+      .then((res) => setPayslips(res.payslips))
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load your payslips"));
+  }, []);
+
+  if (error) return <p className="mt-6 text-sm text-critical">{error}</p>;
+  if (!payslips || payslips.length === 0) return null;
+
+  return (
+    <div className="mt-8">
+      <h3 className="text-sm font-semibold text-ink">My Payslips</h3>
+      <ul className="mt-2 flex flex-col gap-2">
+        {payslips.map((p) => (
+          <li key={p.id} className="rounded border border-border bg-surface p-3 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="font-medium text-ink">{p.billingPeriod}</span>
+              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${PAYSLIP_STATUS_STYLE[p.status] ?? ""}`}>{p.status}</span>
+            </div>
+            <p className="mt-1 text-ink-muted">
+              Basic Rs. {p.basicSalary} + {p.allowances} allowances − {p.lwpDeduction} LWP ({p.lwpDays} days) − {p.loanDeduction} loan ={" "}
+              <span className="font-medium text-ink">Net Rs. {p.netPay}</span>
+            </p>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

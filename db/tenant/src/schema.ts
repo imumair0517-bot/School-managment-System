@@ -661,6 +661,13 @@ export const staffLoanLedger = pgTable("staff_loan_ledger", {
   amount: integer("amount").notNull(),
   note: text("note"),
   recordedBy: uuid("recorded_by").notNull().references(() => users.id),
+  // Which payslip a 'repayment' row's deduction was swept into, set once
+  // by payslip generation. Deliberately not matched against the pay
+  // period's date range — a repayment is recorded whenever HR hears about
+  // it, not necessarily inside the window it should be deducted from — so
+  // "not yet applied to any payslip" is the real signal, not a date
+  // comparison against createdAt.
+  appliedToPayslipId: uuid("applied_to_payslip_id").references(() => payslips.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
