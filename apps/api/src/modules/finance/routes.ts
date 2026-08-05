@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, gte, lte } from "drizzle-orm";
 import {
   feeHeads,
   feeStructures,
@@ -16,6 +16,8 @@ import {
   userPermissionOverrides,
   studentTags,
   users,
+  expenseCategories,
+  expenses,
 } from "@school-os/db-tenant";
 import {
   createFeeHeadSchema,
@@ -24,6 +26,9 @@ import {
   generateInvoicesSchema,
   recordPaymentSchema,
   sendFeeRemindersSchema,
+  createExpenseCategorySchema,
+  createExpenseSchema,
+  pnlQuerySchema,
 } from "@school-os/validation";
 import { getTenantDbConnection } from "../../db/tenant-registry.js";
 import { tenantResolutionMiddleware } from "../../middleware/tenant-resolution.js";
@@ -615,4 +620,119 @@ export async function financeRoutes(app: FastifyInstance) {
 
   // GET /v1/notifications lives in the communication module now (Milestone
   // 9) — it's a shared log across every message type, not finance-owned.
+
+  // --- Milestone 18: Expense Tracking & basic Accounting ---
+  //
+  // "Not a full GL replacement" (Phase 2 §F) — one flat, category-tagged
+  // expense list, no chart of accounts. Category setup is policy, same
+  // [SO/PR] restriction as fee heads; recording an expense is day-to-day,
+  // same finance:write level Admin Staff already uses to record payments.
+
+  app.post("/v1/expense-categories", { preHandler: [...auth, requirePermission("finance", "write")] }, async (req, reply) => {
+    if (!requirePolicyRole(req, reply)) return;
+    const parsed = createExpenseCategorySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: { code: "invalid_input", message: parsed.error.issues[0]?.message ?? "Invalid input" } });
+    }
+    const tenant = req.tenant!;
+    const db = await getTenantDbConnection(tenant.id);
+    const [category] = await db.insert(expenseCategories).values(parsed.data).returning();
+    await logAuditEvent(tenant.id, { actorUserId: req.authUser!.sub, action: "expense_category.created", entityType: "expense_category", entityId: category!.id });
+    return reply.code(201).send({ category });
+  });
+
+  app.get("/v1/expense-categories", { preHandler: [...auth, requirePermission("finance", "read")] }, async (req, reply) => {
+    const db = await getTenantDbConnection(req.tenant!.id);
+    const rows = await db.select().from(expenseCategories);
+    return reply.send({ categories: rows });
+  });
+
+  app.post("/v1/expenses", { preHandler: [...auth, requirePermission("finance", "write")] }, async (req, reply) => {
+    const parsed = createExpenseSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: { code: "invalid_input", message: parsed.error.issues[0]?.message ?? "Invalid input" } });
+    }
+    const tenant = req.tenant!;
+    const db = await getTenantDbConnection(tenant.id);
+
+    const categoryRows = await db.select().from(expenseCategories).where(eq(expenseCategories.id, parsed.data.categoryId));
+    if (!categoryRows[0]) return reply.code(404).send({ error: { code: "not_found", message: "No such expense category" } });
+
+    const [expense] = await db.insert(expenses).values({ ...parsed.data, recordedBy: req.authUser!.sub }).returning();
+    await logAuditEvent(tenant.id, {
+      actorUserId: req.authUser!.sub,
+      action: "expense.recorded",
+      entityType: "expense",
+      entityId: expense!.id,
+      detail: { amount: parsed.data.amount, categoryId: parsed.data.categoryId },
+    });
+    return reply.code(201).send({ expense });
+  });
+
+  app.get("/v1/expenses", { preHandler: [...auth, requirePermission("finance", "read")] }, async (req, reply) => {
+    const { categoryId, startDate, endDate } = req.query as { categoryId?: string; startDate?: string; endDate?: string };
+    const db = await getTenantDbConnection(req.tenant!.id);
+
+    const conditions = [];
+    if (categoryId) conditions.push(eq(expenses.categoryId, categoryId));
+    if (startDate) conditions.push(gte(expenses.date, startDate));
+    if (endDate) conditions.push(lte(expenses.date, endDate));
+
+    const [rows, categories] = await Promise.all([
+      conditions.length > 0 ? db.select().from(expenses).where(and(...conditions)) : db.select().from(expenses),
+      db.select().from(expenseCategories),
+    ]);
+    const categoryById = new Map(categories.map((c) => [c.id, c]));
+
+    return reply.send({
+      expenses: rows
+        .sort((a, b) => (a.date < b.date ? 1 : -1))
+        .map((e) => ({ id: e.id, categoryId: e.categoryId, categoryName: categoryById.get(e.categoryId)?.name ?? null, amount: e.amount, description: e.description, date: e.date })),
+    });
+  });
+
+  // The P&L view — restricted to School Owner/Principal (like fee/
+  // discount policy above), since it reveals whole-school profitability,
+  // not just a line item. Reads the existing payments table for income
+  // (cash actually collected, not invoiced-but-unpaid amounts) plus this
+  // milestone's expenses table — no separate summary table to keep in
+  // sync with either.
+  app.get("/v1/finance/pnl", { preHandler: [...auth, requirePermission("finance", "read")] }, async (req, reply) => {
+    if (!requirePolicyRole(req, reply)) return;
+    const parsed = pnlQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: { code: "invalid_input", message: parsed.error.issues[0]?.message ?? "Invalid input" } });
+    }
+    const { startDate, endDate } = parsed.data;
+    const db = await getTenantDbConnection(req.tenant!.id);
+
+    const [paymentRows, expenseRows, categories] = await Promise.all([
+      db.select().from(payments).where(eq(payments.status, "succeeded")),
+      db.select().from(expenses).where(and(gte(expenses.date, startDate), lte(expenses.date, endDate))),
+      db.select().from(expenseCategories),
+    ]);
+    const categoryById = new Map(categories.map((c) => [c.id, c]));
+
+    const incomeInRange = paymentRows.filter((p) => p.paidAt && p.paidAt.toISOString().slice(0, 10) >= startDate && p.paidAt.toISOString().slice(0, 10) <= endDate);
+    const income = incomeInRange.reduce((sum, p) => sum + p.amount, 0);
+
+    const expenseByCategory = new Map<string, number>();
+    for (const e of expenseRows) {
+      expenseByCategory.set(e.categoryId, (expenseByCategory.get(e.categoryId) ?? 0) + e.amount);
+    }
+    const totalExpenses = expenseRows.reduce((sum, e) => sum + e.amount, 0);
+
+    return reply.send({
+      startDate,
+      endDate,
+      income,
+      totalExpenses,
+      netProfit: income - totalExpenses,
+      expensesByCategory: [...expenseByCategory.entries()].map(([categoryId, amount]) => ({
+        categoryId,
+        categoryName: categoryById.get(categoryId)?.name ?? null,
+        amount,
+      })),
+    });
+  });
 }

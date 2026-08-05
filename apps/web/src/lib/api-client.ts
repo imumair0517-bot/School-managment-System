@@ -204,6 +204,17 @@ export const api = {
     apiFetch("/v1/invoices/send-reminders", { method: "POST", body: JSON.stringify({ excludeTagId }) }),
   listNotifications: (type?: string) => apiFetch(`/v1/notifications${type ? `?type=${type}` : ""}`),
 
+  // Expense Tracking & basic Accounting (Milestone 18, Phase 2 §F)
+  listExpenseCategories: () => apiFetch("/v1/expense-categories"),
+  createExpenseCategory: (input: { name: string }) => apiFetch("/v1/expense-categories", { method: "POST", body: JSON.stringify(input) }),
+  listExpenses: (params?: { categoryId?: string; startDate?: string; endDate?: string }) => {
+    const qs = new URLSearchParams(Object.fromEntries(Object.entries(params ?? {}).filter(([, v]) => v))).toString();
+    return apiFetch(`/v1/expenses${qs ? `?${qs}` : ""}`);
+  },
+  createExpense: (input: { categoryId: string; amount: number; description: string; date: string }) =>
+    apiFetch("/v1/expenses", { method: "POST", body: JSON.stringify(input) }),
+  getPnl: (startDate: string, endDate: string) => apiFetch(`/v1/finance/pnl?startDate=${startDate}&endDate=${endDate}`),
+
   // Communication (Milestone 9 — leave requests, channel preference, announcements)
   createLeaveRequest: (input: { studentId: string; startDate: string; endDate: string; reason: string }) =>
     apiFetch("/v1/leave-requests", { method: "POST", body: JSON.stringify(input) }),

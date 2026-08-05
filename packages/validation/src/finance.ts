@@ -38,3 +38,21 @@ export const recordPaymentSchema = z.object({
   providerReference: z.string().min(2).max(120),
   paidAt: z.string().optional(),
 });
+
+// Milestone 18 — Expense Tracking & basic Accounting (Phase 2 §F).
+
+export const createExpenseCategorySchema = z.object({
+  name: z.string().min(2).max(60),
+});
+
+export const createExpenseSchema = z.object({
+  categoryId: z.string().uuid(),
+  amount: z.number().int().min(1).max(10_000_000),
+  description: z.string().min(2).max(300),
+  date: z.string().date(),
+});
+
+export const pnlQuerySchema = z.object({
+  startDate: z.string().date(),
+  endDate: z.string().date(),
+});

@@ -511,7 +511,236 @@ export default function FinancePage() {
         </ul>
         {invoices.length === 0 && <p className="mt-4 text-sm text-ink-muted">No invoices match this filter.</p>}
       </section>
+
+      <ExpensesAndPnl isPolicyRole={isPolicyRole} />
     </div>
+  );
+}
+
+type ExpenseCategory = { id: string; name: string };
+type Expense = { id: string; categoryId: string; categoryName: string | null; amount: number; description: string; date: string };
+type Pnl = { startDate: string; endDate: string; income: number; totalExpenses: number; netProfit: number; expensesByCategory: { categoryId: string; categoryName: string | null; amount: number }[] };
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+function monthStartStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+// Milestone 18 (Phase 2 §F) — "not a full GL replacement," just expense
+// entry by category plus a P&L combining that with fee income already
+// collected (the payments table). Category setup mirrors fee heads'
+// [SO/PR]-only policy split; recording an expense is finance:write, same
+// as recording a payment. The P&L itself stays hidden from anyone who
+// isn't School Owner/Principal, matching the server's own restriction —
+// a UX courtesy here, the real boundary is server-side.
+function ExpensesAndPnl({ isPolicyRole }: { isPolicyRole: boolean }) {
+  const [categories, setCategories] = useState<ExpenseCategory[]>([]);
+  const [categoryName, setCategoryName] = useState("");
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [expenseForm, setExpenseForm] = useState({ categoryId: "", amount: "", description: "", date: todayStr() });
+  const [pnlRange, setPnlRange] = useState({ startDate: monthStartStr(), endDate: todayStr() });
+  const [pnl, setPnl] = useState<Pnl | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  function refreshCategories() {
+    api
+      .listExpenseCategories()
+      .then((res) => setCategories(res.categories))
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load expense categories"));
+  }
+  useEffect(refreshCategories, []);
+
+  function refreshExpenses() {
+    api
+      .listExpenses()
+      .then((res) => setExpenses(res.expenses))
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load expenses"));
+  }
+  useEffect(refreshExpenses, []);
+
+  function refreshPnl() {
+    if (!isPolicyRole) return;
+    api
+      .getPnl(pnlRange.startDate, pnlRange.endDate)
+      .then(setPnl)
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load the P&L"));
+  }
+  useEffect(refreshPnl, [isPolicyRole, pnlRange.startDate, pnlRange.endDate]);
+
+  async function submitCategory(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    try {
+      await api.createExpenseCategory({ name: categoryName });
+      setCategoryName("");
+      refreshCategories();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not create expense category");
+    }
+  }
+
+  async function submitExpense(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    try {
+      await api.createExpense({
+        categoryId: expenseForm.categoryId,
+        amount: Number(expenseForm.amount),
+        description: expenseForm.description,
+        date: expenseForm.date,
+      });
+      setExpenseForm({ categoryId: "", amount: "", description: "", date: todayStr() });
+      refreshExpenses();
+      refreshPnl();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not record expense");
+    }
+  }
+
+  return (
+    <section className="mt-8">
+      <h3 className="text-sm font-semibold text-ink">Expenses</h3>
+      {error && <p className="mt-2 text-sm text-critical">{error}</p>}
+
+      {isPolicyRole && (
+        <>
+          <ul className="mt-2 flex flex-wrap gap-2">
+            {categories.map((c) => (
+              <li key={c.id} className="rounded-full bg-surface px-3 py-1 text-xs text-ink-muted">
+                {c.name}
+              </li>
+            ))}
+          </ul>
+          <form onSubmit={submitCategory} className="mt-2 flex items-end gap-3">
+            <input
+              value={categoryName}
+              onChange={(e) => setCategoryName(e.target.value)}
+              placeholder="e.g. Utilities"
+              className="rounded border border-border bg-bg px-3 py-2 text-sm text-ink outline-none focus:border-accent"
+            />
+            <button type="submit" disabled={!categoryName.trim()} className="rounded bg-accent px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
+              Add category
+            </button>
+          </form>
+        </>
+      )}
+
+      <form onSubmit={submitExpense} className="mt-4 flex flex-wrap items-end gap-3 rounded border border-border bg-surface p-4">
+        <label className="flex flex-col gap-1 text-sm text-ink">
+          Category
+          <select
+            value={expenseForm.categoryId}
+            onChange={(e) => setExpenseForm({ ...expenseForm, categoryId: e.target.value })}
+            className="rounded border border-border bg-bg px-3 py-2 text-ink outline-none focus:border-accent"
+          >
+            <option value="">Choose a category…</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-sm text-ink">
+          Amount (Rs.)
+          <input
+            type="number"
+            value={expenseForm.amount}
+            onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })}
+            className="w-28 rounded border border-border bg-bg px-3 py-2 text-ink outline-none focus:border-accent"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-sm text-ink">
+          Description
+          <input
+            value={expenseForm.description}
+            onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })}
+            className="rounded border border-border bg-bg px-3 py-2 text-ink outline-none focus:border-accent"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-sm text-ink">
+          Date
+          <input
+            type="date"
+            value={expenseForm.date}
+            max={todayStr()}
+            onChange={(e) => setExpenseForm({ ...expenseForm, date: e.target.value })}
+            className="rounded border border-border bg-bg px-3 py-2 text-ink outline-none focus:border-accent"
+          />
+        </label>
+        <button
+          type="submit"
+          disabled={!expenseForm.categoryId || !expenseForm.amount || !expenseForm.description.trim()}
+          className="rounded bg-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+        >
+          Record expense
+        </button>
+      </form>
+
+      <ul className="mt-4 flex flex-col divide-y divide-border rounded border border-border bg-surface">
+        {expenses.slice(0, 20).map((e) => (
+          <li key={e.id} className="flex items-center justify-between px-4 py-2 text-sm">
+            <span className="text-ink">
+              {e.date} — {e.categoryName} — {e.description}
+            </span>
+            <span className="text-ink-muted">Rs. {e.amount}</span>
+          </li>
+        ))}
+      </ul>
+      {expenses.length === 0 && <p className="mt-2 text-sm text-ink-muted">No expenses recorded yet.</p>}
+
+      {isPolicyRole && (
+        <div className="mt-6">
+          <h4 className="text-sm font-semibold text-ink">Profit & Loss</h4>
+          <div className="mt-2 flex flex-wrap items-end gap-3">
+            <label className="flex flex-col gap-1 text-sm text-ink">
+              From
+              <input
+                type="date"
+                value={pnlRange.startDate}
+                onChange={(e) => setPnlRange({ ...pnlRange, startDate: e.target.value })}
+                className="rounded border border-border bg-bg px-3 py-2 text-ink outline-none focus:border-accent"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm text-ink">
+              To
+              <input
+                type="date"
+                value={pnlRange.endDate}
+                onChange={(e) => setPnlRange({ ...pnlRange, endDate: e.target.value })}
+                className="rounded border border-border bg-bg px-3 py-2 text-ink outline-none focus:border-accent"
+              />
+            </label>
+          </div>
+
+          {pnl && (
+            <div className="mt-3 rounded border border-border bg-surface p-4 text-sm">
+              <p className="text-ink">
+                Income: <span className="font-medium">Rs. {pnl.income}</span>
+              </p>
+              <p className="mt-1 text-ink">
+                Expenses: <span className="font-medium">Rs. {pnl.totalExpenses}</span>
+              </p>
+              <p className="mt-1 text-ink">
+                Net: <span className={`font-medium ${pnl.netProfit >= 0 ? "text-success" : "text-critical"}`}>Rs. {pnl.netProfit}</span>
+              </p>
+              {pnl.expensesByCategory.length > 0 && (
+                <ul className="mt-3 flex flex-col gap-1 text-ink-muted">
+                  {pnl.expensesByCategory.map((c) => (
+                    <li key={c.categoryId}>
+                      {c.categoryName}: Rs. {c.amount}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 

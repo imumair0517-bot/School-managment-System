@@ -713,3 +713,30 @@ export const examQuestionPapers = pgTable("exam_question_papers", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// --- Milestone 18: Expense Tracking & basic Accounting (Phase 2 §F) ---
+//
+// "Not a full GL replacement" (Phase 2 §F's own scope note) — one flat
+// expense table with a category, no chart-of-accounts/double-entry
+// bookkeeping. expense_categories is policy (School Owner/Principal set
+// up the category list, same "[SO/PR]" restriction fee_heads uses),
+// expenses is day-to-day entry (Admin Staff records them, same
+// finance:write level as recording a payment). The P&L view reads this
+// table plus the existing payments table at request time — no separate
+// ledger/summary table to keep in sync.
+
+export const expenseCategories = pgTable("expense_categories", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull().unique(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const expenses = pgTable("expenses", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  categoryId: uuid("category_id").notNull().references(() => expenseCategories.id),
+  amount: integer("amount").notNull(),
+  description: text("description").notNull(),
+  date: date("date").notNull(),
+  recordedBy: uuid("recorded_by").notNull().references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
