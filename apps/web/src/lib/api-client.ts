@@ -256,4 +256,9 @@ export const api = {
   approveExamPaper: (examSubjectId: string, input: { content: string; aiGenerated?: boolean }) =>
     apiFetch(`/v1/exam-subjects/${examSubjectId}/question-paper/approve`, { method: "POST", body: JSON.stringify(input) }),
   getExamPaper: (examSubjectId: string) => apiFetch(`/v1/exam-subjects/${examSubjectId}/question-paper`),
+
+  // Custom Reports (Milestone 16, Phase 2 §F)
+  listReportEntities: () => apiFetch("/v1/reports/entities"),
+  runReport: (input: { entity: string; fields: string[]; filters?: Record<string, string> }) =>
+    apiFetch("/v1/reports/run", { method: "POST", body: JSON.stringify(input) }),
 };

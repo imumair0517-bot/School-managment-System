@@ -12,3 +12,4 @@ export * from "./tags.js";
 export * from "./communication.js";
 export * from "./staff-hr.js";
 export * from "./exam-papers.js";
+export * from "./reports.js";
