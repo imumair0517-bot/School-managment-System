@@ -8,15 +8,42 @@ expand internationally.
 — 16 phases, all drafted. Start there for the full design before touching
 code.
 
-**Current build state:** Milestone 0 (Phase 13) — repo scaffold, local dev
-environment, and login working end-to-end for one seeded tenant/user.
-Everything past that (real signup, students, attendance, fees, ...) is
-still ahead, per the roadmap.
+**Current build state:** Milestones 0 through 18 (Phase 13) — the full V1
+feature set (admissions through promotion/year-end), M12's hardening pass,
+and five V2 modules built ahead of schedule at the user's request: staff
+attendance & leave, payroll, an AI exam generator, custom reports, platform
+billing/auto-billing, and expense tracking. See the roadmap doc and each
+milestone's own commit message for what shipped and what's still simulated
+(online payment collection and Voice AI call placement are both scaffolded
+but not wired to a real vendor yet).
 
-## Local development
+## Try it in one command (Docker)
 
-Requires Node 20+ and a local Postgres + Redis (via `docker compose up -d`,
-or any local install).
+The fastest way to see it running, with **nothing installed but Docker**:
+
+```bash
+docker compose up
+```
+
+This starts Postgres, Redis, the API, the background worker, and the web
+app, runs migrations, and seeds a demo school — all in one command. First
+run takes a few minutes (installing dependencies inside each container);
+later runs are fast. Once you see the web app log "Ready", open
+**http://localhost:3000** and sign in with:
+
+- **School staff:** `owner@greenvalley.test` / `changeme123`
+- **Platform admin console** (billing, plans, all schools):
+  http://localhost:3000/super-admin/login with `admin@platform.test` /
+  `changeme123`
+
+Stop everything with `Ctrl+C`, or `docker compose down` to also remove the
+containers (add `-v` to that to wipe the database and start fresh next
+time).
+
+## Local development (without Docker)
+
+Requires Node 20+ and a local Postgres + Redis (via `docker compose up -d
+postgres redis` for just the two databases, or any local install).
 
 ```bash
 cp .env.example .env      # edit if your local Postgres/Redis differ
@@ -32,8 +59,9 @@ npm run db:tenant:migrate
 npm run db:platform:seed     # creates the dev tenant "greenvalley"
 npm run db:tenant:seed       # creates owner@greenvalley.test / changeme123
 
-npm run dev:api    # http://localhost:4000
-npm run dev:web    # http://localhost:3000 — redirects to /login
+npm run dev:api     # http://localhost:4000
+npm run dev:worker  # background jobs (tenant provisioning, etc.)
+npm run dev:web     # http://localhost:3000 — redirects to /login
 ```
 
 Sign in with `owner@greenvalley.test` / `changeme123`.
@@ -50,7 +78,7 @@ for the full rationale. Short version:
 
 - `apps/web` — Next.js frontend (all portals)
 - `apps/api` — backend API service
-- `apps/worker` — background job worker (empty until Milestone 1)
+- `apps/worker` — background job worker (tenant provisioning, etc.)
 - `packages/*` — shared code (validation schemas, etc.)
 - `db/platform`, `db/tenant` — Drizzle schemas/migrations for the two
   databases described in Phase 5 (`db/tenant` is the template every real
